@@ -52,18 +52,20 @@ footer{padding:24px;text-align:center;color:#999;font-size:.8rem}
 <footer>Paiement verifie manuellement - aucune confirmation automatique. Shopara 2026</footer>
 <script>
 var slug=new URLSearchParams(location.search).get('slug');
-var SHOP=null,CART={};
+var SHOP=null,CART={},_prods=[];
 function $(id){return document.getElementById(id);}
 function fmt(n){return new Intl.NumberFormat('fr-SN').format(n)+' FCFA';}
+function findProd(pid){for(var i=0;i<_prods.length;i++){if(_prods[i].id===pid)return _prods[i];}return null;}
 function init(){
   if(!slug){$('products').innerHTML='<p>Boutique introuvable (lien incorrect).</p>';return;}
-  fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'boutique',shopId:0,slug:slug})}).catch(function(){});
+  fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'boutique'})}).catch(function(){});
   fetch('/api/public/shop/'+slug).then(function(r){return r.json();}).then(function(d){
     if(!d.shop){$('products').innerHTML='<p>Cette boutique n existe pas ou n est pas publiee.</p>';return;}
-    SHOP=d.shop;document.title=d.shop.name+' - Shopara';
+    SHOP=d.shop;_prods=d.products;
+    document.title=d.shop.name+' - Shopara';
     $('shopName').textContent=d.shop.name;$('shopDesc').textContent=d.shop.description||'';
     fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'boutique',shopId:SHOP.id})}).catch(function(){});
-    $('products').innerHTML=d.products.map(function(p){return '<div class="prod"><h3>'+p.name+'</h3><div class="price">'+fmt(p.price)+'</div><p>'+(p.description||'')+'</p><p style="margin-top:6px">Stock : '+p.stock+'</p><label>Quantite</label><input id="q-'+p.id+'" type="number" min="1" max="'+p.stock+'" value="1"><br><button onclick="add('+p.id+')">Ajouter au panier</button></div>';}).join('')||'<p>Aucun produit disponible.</p>';
+    $('products').innerHTML=d.products.length?d.products.map(function(p){return '<div class="prod"><h3>'+p.name+'</h3><div class="price">'+fmt(p.price)+'</div><p>'+(p.description||'')+'</p><p style="margin-top:6px">Stock : '+p.stock+'</p><label>Quantite</label><input id="q-'+p.id+'" type="number" min="1" max="'+p.stock+'" value="1"><br><button onclick="add('+p.id+')">Ajouter au panier</button></div>';}).join(''):'<p>Aucun produit disponible.</p>';
   });
 }
 function add(pid){
@@ -71,9 +73,6 @@ function add(pid){
   if(!p||q<1||q>p.stock){alert('Quantite invalide.');return;}
   CART[pid]=(CART[pid]||0)+q;render();
 }
-function findProd(pid){return _prods.filter(function(p){return p.id===pid;})[0];}
-var _prods=[];
-function setProds(ps){_prods=ps;}
 function render(){
   var ids=Object.keys(CART);
   $('cart').style.display=ids.length?'block':'none';
@@ -89,9 +88,9 @@ function order(){
   var items=Object.keys(CART).map(function(id){return {productId:+id,qty:CART[id]};});
   if(!items.length){return;}
   var b={customerName:$('c-name').value,customerPhone:$('c-phone').value,address:$('c-addr').value,zone:$('c-zone').value,items:items,paymentMode:$('c-pay').value};
-  if(!b.customerName||!b.customerPhone||!b.address){var m=$('msg');m.className='msg err';m.textContent='Remplissez nom, telephone et adresse.';return;}
+  var m=$('msg');
+  if(!b.customerName||!b.customerPhone||!b.address){m.className='msg err';m.textContent='Remplissez nom, telephone et adresse.';return;}
   fetch('/api/public/shop/'+slug+'/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}).then(function(d){
-    var m=$('msg');
     if(!d.ok){m.className='msg err';m.textContent=d.error||'Erreur';return;}
     location.href='/recu.html?code='+d.order.code;
   });
