@@ -172,8 +172,8 @@ app.post('/api/track', visitLimiter, (req, res) => {
     const { page, shopId, productId } = req.body || {};
     if (!page || typeof page !== 'string' || page.length > 100) return res.status(400).end();
     const sid = (req.sessionID || 'anon').slice(0, 32);
-    db.prepare("INSERT INTO visits(page,shop_id,product_id,session,referer) VALUES(?,?,?,?,datetime('now'),?)")
-      .run(page.slice(0, 100), shopId ? Number(shopId) : null, productId ? Number(productId) : null, sid, (req.headers.referer || '').slice(0, 200));
+    db.prepare("INSERT INTO visits(page,shop_id,product_id,session,referer) VALUES(?,?,?,?,'',datetime('now'))")
+      .run(page.slice(0, 100), shopId ? Number(shopId) : null, productId ? Number(productId) : null, sid);
     res.status(204).end();
   } catch (e) { res.status(500).end(); }
 });
@@ -231,3 +231,57 @@ app.put('/api/shops/:shopId', requireAuth, requireShop, (req, res) => {
       feeDakar != null ? Number(feeDakar) : null, feeRegions != null ? Number(feeRegions) : null, req.shop.id);
   res.json({ ok: true });
 });
+
+// ---------- Produits ----------
+app.post('/api/shops/:shopId/products', requireAuth, requireShop, (req, res) => {
+  const { name, price, stock, description } = req.body || {};
+  if (!name || !Number(price) || Number(price) <= 0) return res.status(400).json({ error: 'Nom et prix valides requis' });
+  const r = db.prepare('INSERT INTO products(shop_id,name,price,stock,description) VALUES(?,?,?,?,?)')
+    .run(req.shop.id, String(name).trim(), Math.round(Number(price)), Math.max(0, Math.round(Number(stock) || 0)), description || '');
+  res.json({ ok: true, product: { id: r.lastInsertRowid } });
+});
+app.get('/api/shops/:shopId/products', requireAuth, requireShop, (req, res) => {
+  res.json({ products: db.prepare('SELECT * FROM products WHERE shop_id=? ORDER BY id DESC').all(req.shop.id) });
+});
+app.put('/api/shops/:shopId/products/:pid', requireAuth, requireShop, (req, res) => {
+  const p = db.prepare('SELECT * FROM products WHERE id=? AND shop_id=?').get(req.params.pid, req.shop.id);
+  if (!p) return res.status(404).json({ error: 'Produit introuvable' });
+  const { name, price, stock, description, active } = req.body || {};
+  db.prepare('UPDATE products SET name=COALESCE(?,name),price=COALESCE(?,price),stock=COALESCE(?,stock),description=COALESCE(?,description),active=COALESCE(?,active) WHERE id=?')
+    .run(name ?? null, price != null ? Math.round(Number(price)) : null, stock != null ? Math.round(Number(stock)) : null, description ?? null, active ?? null, p.id);
+  res.json({ ok: true });
+});
+app.delete('/api/shops/:shopId/products/:pid', requireAuth, requireShop, (req, res) => {
+  db.prepare('UPDATE products SET active=0 WHERE id=? AND shop_id=?').run(req.params.pid, req.shop.id);
+  res.json({ ok: true });
+});
+
+// ---------- Boutique publique ----------
+app.get('/api/public/shop/:slug', (req, res) => {
+  const shop = db.prepare('SELECT id,name,slug,description,phone,address,fee_dakar,fee_regions FROM shops WHERE slug=? AND active=1').get(req.params.slug);
+  if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
+  res.json({ shop, products: db.prepare('SELECT id,name,price,stock,description FROM products WHERE shop_id=? AND active=1 AND stock>0').all(shop.id) });
+});
+
+// ---------- Commandes (acheteur) ----------
+const orderLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
+app.post('/api/public/shop/:slug/order', orderLimiter, (req, res) => {
+  const shop = db.prepare('SELECT * FROM shops WHERE slug=? AND active=1').get(req.params.slug);
+  if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
+  const { customerName, customerPhone, address, zone, items, paymentMode } = req.body || {};
+  if (!customerName || !customerPhone || !address || !['dakar', 'regions'].includes(zone) || !['wave', 'om', 'livraison'].includes(paymentMode))
+    return res.status(400).json({ error: 'Donnees de commande incompletes' });
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Panier vide' });
+  let total = 0;
+  const resolved = [];
+  for (const it of items.slice(0, 20)) {
+    const p = db.prepare('SELECT * FROM products WHERE id=? AND shop_id=? AND active=1').get(it.productId, shop.id);
+    if (!p || p.stock < it.qty || it.qty < 1 || it.qty > 50) return res.status(400).json({ error: 'Produit indisponible' });
+    total += p.price * it.qty;
+    resolved.push({ p, qty: it.qty });
+  }
+  const fee = zone === 'dakar' ? shop.fee_dakar : shop.fee_regions;
+  total += fee;
+  const code = 'SHP-' + Date.now().toString(36).toUpperCase() + '-' + crypto.randomBytes(2).toString('hex').toUpperCase();
+  db.transaction(() => {
+    const r = db.prepare('INSERT INTO orders(code,shop_id,customer_name,customer_phone,address,zone,delivery_fee,total,p
