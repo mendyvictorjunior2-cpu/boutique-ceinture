@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: boutique-ceinture
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    repo: https://github.com/mendyvictorjunior2-cpu/boutique-ceinture
+    branch: main
+    envVars:
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASS
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: NUMERO_MARCHAND
+        value: "762695143"
+    healthCheckPath: /
