@@ -1,0 +1,20 @@
+{
+  "name": "boutique-ceinture",
+  "version": "1.0.0",
+  "description": "Boutique en ligne — Ceinture Chauffante Menstruelle (9 900 FCFA) — paiement Wave/Orange Money manuel sécurisé",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "connect-sqlite3": "^0.9.13",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "express-session": "^1.18.0",
+    "helmet": "^7.1.0"
+  }
+}

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Boutique — Ceinture Chauffante Menstruelle</title>
+<style>
+  * { box-sizing: border-box; margin: 0; font-family: system-ui, sans-serif; }
+  body { background: #fdf2f8; color: #111827; }
+  .wrap { max-width: 720px; margin: auto; padding: 16px; }
+  header { background: linear-gradient(135deg,#be185d,#9d174d); color:#fff; padding: 24px 16px; text-align:center; border-radius: 0 0 24px 24px; }
+  h1 { font-size: 1.4rem; }
+  .card { background: #fff; border-radius: 16px; padding: 20px; margin-top: 14px; box-shadow: 0 2px 10px rgba(157,23,77,.08); }
+  .prix { font-size: 1.8rem; color: #be185d; font-weight: 700; }
+  .stock { background:#f0fdf4; color:#166534; padding:6px 10px; border-radius:8px; display:inline-block; margin-top:8px; font-size:.9rem; }
+  label { display:block; margin-top:12px; font-weight:600; font-size:.95rem; }
+  input, select { width:100%; padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-top:6px; font-size:1rem; }
+  .total { font-size:1.2rem; font-weight:700; margin-top:16px; color:#111827; }
+  button { width:100%; padding:14px; margin-top:16px; background:#be185d; color:#fff; border:none; border-radius:12px; font-size:1.1rem; font-weight:700; cursor:pointer; }
+  button:disabled { background:#d1d5db; }
+  .msg { margin-top:12px; padding:12px; border-radius:10px; display:none; }
+  .ok { background:#f0fdf4; color:#166534; display:block; }
+  .err { background:#fef2f2; color:#b91c1c; display:block; }
+  #instructions { display:none; }
+  #instructions ol { margin:10px 0 0 20px; }
+  #instructions li { margin-top:8px; font-size:.95rem; }
+  footer { text-align:center; color:#9ca3af; font-size:.8rem; padding:20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌸 Ceinture Chauffante Menstruelle</h1>
+  <p>Chaleur apaisante USB rechargeable — 3 niveaux — tissu doux lavable</p>
+</header>
+<div class="wrap">
+  <div class="card">
+    <div class="prix" id="prix">9 900 FCFA</div>
+    <p id="description" style="margin-top:8px;"></p>
+    <div class="stock" id="stock"></div>
+    <label>Quantité <input id="qte" type="number" min="1" value="1" /></label>
+    <label>Ville <input id="ville" placeholder="Dakar / Thiès / Saint-Louis..." /></label>
+    <label>Quartier <input id="quartier" placeholder="Votre quartier" /></label>
+    <label>Nom complet <input id="nom" placeholder="Prénom et nom" /></label>
+    <label>Téléphone <input id="tel" placeholder="77 000 00 00" /></label>
+    <label>Mode de paiement
+      <select id="mode">
+        <option value="paiement_livraison">Paiement à la livraison</option>
+        <option value="wave">Wave</option>
+        <option value="orange_money">Orange Money</option>
+      </select>
+    </label>
+    <div class="total" id="totalAvant">Total à payer : …</div>
+    <button onclick="commander()">Commander</button>
+    <div id="msg" class="msg"></div>
+    <div id="instructions" class="card">
+      <h3>💳 Instructions de paiement</h3>
+      <ol id="etapesPaiement"></ol>
+    </div>
+  </div>
+</div>
+<footer>© 2026 — Boutique Ceinture Chauffante. Paiements Wave &amp; Orange Money vérifiés manuellement sous 1 h.</footer>
+
+<script>
+const fmt = n => new Intl.NumberFormat("fr-SN").format(n) + " FCFA";
+const msg = document.getElementById("msg");
+let P = null;
+
+async function chargerProduit() {
+  P = await fetch("/api/produit").then(r => r.json());
+  document.getElementById("prix").textContent = fmt(P.prix_fcfa);
+  document.getElementById("description").textContent = P.description;
+  document.getElementById("stock").textContent = "En stock : " + P.stock + " unités";
+  majTotal();
+}
+
+async function commander() {
+  msg.className = "msg";
+  const corps = {
+    nom: nom.value, telephone: tel.value, ville: ville.value,
+    quartier: quartier.value, quantite: Number(qte.value), mode_paiement: mode.value
+  };
+  if (!corps.nom || !corps.telephone || !corps.ville || !corps.quartier || !corps.quantite) {
+    msg.className = "err"; msg.textContent = "❗ Veuillez remplir tous les champs.";
+    return;
+  }
+  try {
+    const r = await fetch("/api/commande", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
+    const d = await r.json();
+    if (!r.ok) {
+      msg.className = "err"; msg.textContent = "❗ " + (d.erreur || "Erreur.");
+      if (d.stock_restant !== undefined) document.getElementById("stock").textContent = "En stock : " + d.stock_restant + " unités";
+      return;
+    }
+    if (d.paiement.mode === "manuel") {
+      document.getElementById("instructions").style.display = "block";
+      document.getElementById("etapesPaiement").innerHTML = d.paiement.instructions.map(i => `<li>${i}</li>`).join("");
+      msg.className = "ok";
+      msg.textContent = `✅ Commande #${d.commande.id} créée — en attente de paiement. Total : ${fmt(d.commande.total_fcfa)}.`;
+    } else {
+      location.href = d.paiement.url; // redirection vers Wave/Orange (Phase 2)
+    }
+  } catch (e) {
+    msg.className = "err"; msg.textContent = "❗ Connexion impossible. Réessayez.";
+  }
+}
+
+document.getElementById("qte").addEventListener("change", majTotal);
+document.getElementById("ville").addEventListener("change", majTotal);
+function majTotal() {
+  if (!P) return;
+  const frais = ville.value.trim().toLowerCase() === "dakar" ? 1000 : 2000;
+  const q = Number(qte.value) || 1;
+  document.getElementById("totalAvant").textContent = `Total à payer : ${fmt(P.prix_fcfa * q + frais)} (dont livraison ${fmt(frais)})`;
+}
+
+// Retour navigateur depuis Wave/Orange : JAMAIS une preuve — on interroge le serveur.
+if (new URLSearchParams(location.search).get("paiement") === "retour") {
+  const cmd = new URLSearchParams(location.search).get("cmd");
+  const verif = setInterval(async () => {
+    const s = await fetch(`/api/paiements/statut/${cmd}`).then(r => r.json());
+    if (s.statut_paiement === "payee") { clearInterval(verif); alert("✅ Paiement confirmé ! Commande #" + cmd + " payée."); }
+  }, 3000);
+}
+
+chargerProduit();
+</script>
+</body>
+</html>
