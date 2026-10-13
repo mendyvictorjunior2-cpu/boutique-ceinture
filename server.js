@@ -20,7 +20,7 @@ app.use(session({
 }));
 
 const limiterGlobal = rateLimit({ windowMs: 15*60*1000, max: 300 });
-const limiterAuth = rateLimit({ windowMs: 15*60*1000, max: 20, message: { error: 'Trop de tentatives, réessayez dans 15 minutes.' } });
+const limiterAuth = rateLimit({ windowMs: 15*60*1000, max: 20, message: { error: 'Trop de tentatives.' } });
 const limiterPublic = rateLimit({ windowMs: 60*1000, max: 120 });
 app.use('/api/', limiterGlobal);
 app.use('/api/inscription', limiterAuth);
@@ -53,13 +53,12 @@ function requireAbonnement(req, res, next) {
   req.abonnement = ab; next();
 }
 
-// ===== AUTH =====
 app.post('/api/inscription', (req, res) => {
   const { nom, email, telephone, motDePasse } = req.body || {};
-  if (!nom || !email || !telephone || !motDePasse) return res.status(400).json({ error: 'Nom, email, téléphone et mot de passe requis.' });
-  if (String(motDePasse).length < 6) return res.status(400).json({ error: 'Mot de passe: 6 caractères minimum.' });
+  if (!nom || !email || !telephone || !motDePasse) return res.status(400).json({ error: 'Champs requis manquants.' });
+  if (String(motDePasse).length < 6) return res.status(400).json({ error: 'Mot de passe: 6 caracteres minimum.' });
   const existe = db.prepare('SELECT id FROM vendeurs WHERE email = ?').get(String(email).toLowerCase().trim());
-  if (existe) return res.status(409).json({ error: 'Un compte existe déjà avec cet email.' });
+  if (existe) return res.status(409).json({ error: 'Un compte existe deja avec cet email.' });
   const id = randomId();
   db.prepare('INSERT INTO vendeurs (id, nom, email, telephone, mot_de_passe_hash, actif, cree_le) VALUES (?,?,?,?,?,1,datetime("now"))')
     .run(id, nom.trim(), String(email).toLowerCase().trim(), String(telephone), h(motDePasse));
@@ -70,7 +69,7 @@ app.post('/api/connexion', (req, res) => {
   const { email, motDePasse } = req.body || {};
   const u = db.prepare('SELECT * FROM vendeurs WHERE email = ?').get(String(email||'').toLowerCase().trim());
   if (!u || u.mot_de_passe_hash !== h(motDePasse)) return res.status(401).json({ error: 'Email ou mot de passe incorrect.' });
-  if (!u.actif) return res.status(403).json({ error: 'Compte suspendu. Contactez Shopara.' });
+  if (!u.actif) return res.status(403).json({ error: 'Compte suspendu.' });
   req.session.vendeurId = u.id;
   res.json({ ok: true });
 });
@@ -83,10 +82,9 @@ app.get('/api/moi', (req, res) => {
   res.json({ connecte: true, vendeur: u, boutiques: bs });
 });
 
-// ===== BOUTIQUES =====
 app.post('/api/boutiques', requireVendeur, (req, res) => {
   const { nom, description, telephone, adresse, ville, fraisLivraisonDakar, fraisLivraisonRegions } = req.body || {};
-  if (!nom || !telephone) return res.status(400).json({ error: 'Nom et téléphone de la boutique requis.' });
+  if (!nom || !telephone) return res.status(400).json({ error: 'Nom et telephone requis.' });
   let slug = slugify(nom);
   if (db.prepare('SELECT id FROM boutiques WHERE slug = ?').get(slug)) slug = slug + '-' + randomId().slice(0,4);
   db.prepare('INSERT INTO boutiques (id, vendeur_id, slug, nom, description, telephone, adresse, ville, frais_dakar, frais_regions, publiee, cree_le) VALUES (?,?,?,?,?,?,?,?,?,?,0,datetime("now"))')
@@ -103,7 +101,6 @@ app.put('/api/boutiques/:slug', requireVendeur, requireBoutique, (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== PRODUITS =====
 app.get('/api/boutiques/:slug/produits', (req, res) => {
   const b = db.prepare('SELECT * FROM boutiques WHERE slug = ?').get(req.params.slug);
   if (!b) return res.status(404).json({ error: 'Boutique introuvable.' });
@@ -127,7 +124,6 @@ app.put('/api/boutiques/:slug/produits/:id', requireVendeur, requireBoutique, re
   res.json({ ok: true });
 });
 
-// ===== COMMANDES PUBLIQUES =====
 app.get('/api/publique/boutique/:slug', limiterPublic, (req, res) => {
   const b = db.prepare('SELECT id, slug, nom, description, telephone, adresse, ville, frais_dakar, frais_regions FROM boutiques WHERE slug = ? AND publiee = 1').get(req.params.slug);
   if (!b) return res.status(404).json({ error: 'Boutique introuvable.' });
@@ -137,7 +133,7 @@ app.post('/api/publique/commande', limiterPublic, (req, res) => {
   const { boutiqueSlug, nomClient, telephone, adresse, ville, zone, modePaiement, items } = req.body || {};
   const b = db.prepare('SELECT * FROM boutiques WHERE slug = ? AND publiee = 1').get(String(boutiqueSlug||''));
   if (!b) return res.status(404).json({ error: 'Boutique introuvable.' });
-  if (!nomClient || !telephone || !items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Nom, téléphone et produits requis.' });
+  if (!nomClient || !telephone || !items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Nom, telephone et produits requis.' });
   let total = 0; const lignes = [];
   for (const it of items) {
     const p = db.prepare('SELECT * FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1').get(String(it.produitId||''), b.id);
@@ -161,21 +157,13 @@ app.post('/api/publique/commande', limiterPublic, (req, res) => {
   res.json({ ok: true, numeroCommande, total, fraisLivraison: frais, modePaiement: mode });
 });
 
-// ===== REÇU ACHETEUR =====
 app.get('/api/publique/recu/:numero', limiterPublic, (req, res) => {
   const c = db.prepare('SELECT c.*, b.nom AS boutique_nom, b.telephone AS boutique_tel, b.adresse AS boutique_adresse, b.ville AS boutique_ville FROM commandes c JOIN boutiques b ON b.id = c.boutique_id WHERE c.numero = ?').get(String(req.params.numero||'').trim().toUpperCase());
   if (!c) return res.status(404).json({ error: 'Commande introuvable.' });
   const lignes = db.prepare('SELECT nom, prix_unitaire, quantite FROM lignes_commande WHERE commande_id = ?').all(c.id);
-  res.json({
-    numero: c.numero, date: c.cree_le,
-    boutique: { nom: c.boutique_nom, telephone: c.boutique_tel, adresse: c.boutique_adresse, ville: c.boutique_ville },
-    client: { nom: c.nom_client, telephone: c.telephone, ville: c.ville },
-    lignes, fraisLivraison: c.frais_livraison, total: c.total,
-    modePaiement: c.mode_paiement, statutPaiement: c.statut_paiement, statutCommande: c.statut
-  });
+  res.json({ numero: c.numero, date: c.cree_le, boutique: { nom: c.boutique_nom, telephone: c.boutique_tel, adresse: c.boutique_adresse, ville: c.boutique_ville }, client: { nom: c.nom_client, telephone: c.telephone, ville: c.ville }, lignes, fraisLivraison: c.frais_livraison, total: c.total, modePaiement: c.mode_paiement, statutPaiement: c.statut_paiement, statutCommande: c.statut });
 });
 
-// ===== SUIVI DES VISITES =====
 app.get('/api/publique/visite', limiterPublic, (req, res) => {
   let sid = null;
   const m = (req.headers.cookie || '').match(/sid=([^;]+)/);
