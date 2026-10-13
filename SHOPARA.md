@@ -1,3 +1,3 @@
 # Shopara SaaS
 
-Deploiement en cours.
+Test de mise a jour reussi.
