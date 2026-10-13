@@ -1,13 +1,13 @@
 {
-  "name": "boutique-ceinture",
-  "version": "1.0.0",
-  "description": "Boutique en ligne — Ceinture Chauffante Menstruelle (9 900 FCFA) — paiement Wave/Orange Money manuel sécurisé",
+  "name": "shopara",
+  "version": "2.0.0",
+  "description": "Shopara SaaS boutiques en ligne Senegal",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
-    "node": 20.x
+    "node": "20.x"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
