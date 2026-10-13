@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopara - Confirmation de commande</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#0f172a;color:#e2e8f0;display:flex;justify-content:center;padding:2rem 1rem}
+.card{background:#1e293b;padding:2rem;border-radius:16px;max-width:480px;width:100%;text-align:center}
+h1{color:#4ade80;font-size:1.5rem;margin-bottom:.5rem}
+.numero{font-size:1.2rem;font-weight:800;color:#38bdf8;padding:1rem;background:#0f172a;border-radius:10px;margin:1rem 0}
+a.btn{display:inline-block;background:#0ea5e9;color:#fff;padding:.7rem 1.5rem;border-radius:10px;text-decoration:none;font-weight:700;margin:.3rem}
+p{color:#94a3b8;font-size:.95rem;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Commande enregistree !</h1>
+<p>Votre commande a bien ete recue par le vendeur.</p>
+<div class="numero" id="numero"></div>
+<p><b>Conservez ce numero</b> : il vous permet de retrouver votre recu a tout moment.</p>
+<a class="btn" id="lienRecu" href="#">Voir / imprimer mon recu</a>
+<a class="btn" style="background:#334155" href="/">Retour</a>
+<p style="margin-top:1rem">Tant que le paiement n'est pas confirme par le vendeur, votre commande apparait comme <b>non payee</b>. Aucune confirmation automatique.</p>
+</div>
+<script>
+const numero = new URLSearchParams(location.search).get('numero');
+document.getElementById('numero').textContent = 'Commande N. ' + (numero || '?');
+document.getElementById('lienRecu').href = '/recu/' + numero;
+</script>
+</body>
+</html>
