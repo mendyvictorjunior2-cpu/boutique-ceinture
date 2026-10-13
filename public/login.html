@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopara - Connexion</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:linear-gradient(135deg,#eef0ff,#f7f8fc);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{background:#fff;border-radius:16px;padding:30px;max-width:420px;width:100%;box-shadow:0 4px 20px rgba(79,70,229,.15)}
+.logo{text-align:center;font-size:26px;font-weight:800;margin-bottom:6px;color:#4f46e5}
+.logo span{color:#fbbf24}
+.sub{text-align:center;color:#777;margin-bottom:20px;font-size:14px}
+label{display:block;font-weight:600;margin-top:12px;font-size:.9rem}
+input{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;font-size:1rem;margin-top:6px}
+button{width:100%;padding:13px;margin-top:18px;background:#4f46e5;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer}
+.msg{margin-top:12px;padding:10px;border-radius:8px;display:none;font-size:.9rem}
+.err{background:#fef2f2;color:#b91c1c;display:block}
+p.foot{margin-top:16px;text-align:center;font-size:.9rem;color:#666}
+a{color:#4f46e5}
+</style>
+</head>
+<body>
+<div class="box">
+<div class="logo">Shop<span>ara</span></div>
+<div class="sub">Connectez-vous a votre espace vendeur</div>
+<label>Email</label><input id="email" type="email">
+<label>Mot de passe</label><input id="password" type="password">
+<button onclick="connecter()">Connexion</button>
+<div id="msg" class="msg"></div>
+<p class="foot">Pas de compte ? <a href="/register.html">Creer un compte</a></p>
+</div>
+<script>
+async function connecter(){
+  const m=document.getElementById('msg');
+  const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.value,password:password.value})});
+  const d=await r.json();
+  if(!r.ok){m.className='msg err';m.textContent=d.error||'Erreur';return;}
+  location.href = d.user && d.user.admin ? '/admin.html' : '/dashboard.html';
+}
+</script>
+</body>
+</html>
