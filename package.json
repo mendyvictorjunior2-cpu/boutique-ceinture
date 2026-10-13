@@ -1,7 +1,7 @@
 {
   "name": "shopara",
-  "version": "2.0.0",
-  "description": "Shopara - SaaS de boutiques en ligne pour vendeurs au Senegal",
+  "version": "1.0.0",
+  "description": "Shopara - SaaS de boutiques en ligne multi-vendeurs",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
