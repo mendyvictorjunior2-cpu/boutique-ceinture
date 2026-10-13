@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopara - Mon tableau de bord</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#f7f8fc;color:#1a1a2e}
+header{background:#4f46e5;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+.logo{font-weight:800;font-size:20px}
+.logo span{color:#fbbf24}
+.hbtn{background:rgba(255,255,255,.2);border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:14px}
+main{max-width:900px;margin:20px auto;padding:0 16px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tab{padding:10px 16px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;color:#555}
+.tab.on{background:#4f46e5;color:#fff;border-color:#4f46e5}
+.panel{display:none;background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+.panel.on{display:block}
+label{display:block;font-weight:600;margin-top:10px;font-size:.9rem}
+input,select,textarea{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-top:4px;font-size:1rem}
+button{background:#4f46e5;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:12px}
+button.small{padding:6px 12px;font-size:.8rem}
+button:hover{background:#4338ca}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:.9rem}
+th,td{padding:8px;border-bottom:1px solid #f1f5f9;text-align:left}
+.badge{padding:3px 10px;border-radius:999px;font-size:.75rem;font-weight:700;display:inline-block}
+.b-ok{background:#f0fdf4;color:#166534}.b-wait{background:#fffbeb;color:#b45309}.b-off{background:#fef2f2;color:#b91c1c}.b-info{background:#eff6ff;color:#1d4ed8}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px}
+.kpi{background:#f8fafc;border-radius:10px;padding:12px}
+.kpi .v{font-size:1.4rem;font-weight:800;color:#4f46e5}
+.kpi .l{font-size:.75rem;color:#777}
+.msg{margin-top:10px;padding:10px;border-radius:8px;display:none;font-size:.9rem}
+.ok{background:#f0fdf4;color:#166534;display:block}
+.err{background:#fef2f2;color:#b91c1c;display:block}
+.sub-box{background:linear-gradient(135deg,#eef0ff,#fff);border-radius:12px;padding:16px;margin-top:12px}
+@media(max-width:600px){table{font-size:.8rem}.kpi .v{font-size:1.2rem}}
+</style>
+</head>
+<body>
+<header>
+<div class="logo">Shop<span>ara</span> <small style="font-weight:400;font-size:.8rem" id="who"></small></div>
+<div><a href="/" class="hbtn" style="text-decoration:none">Accueil</a> <button class="hbtn" onclick="logout()">Deconnexion</button></div>
+</header>
+<main>
+<div class="tabs">
+<div class="tab on" onclick="showTab('shops')">Mes boutiques</div>
+<div class="tab" onclick="showTab('products')">Produits</div>
+<div class="tab" onclick="showTab('orders')">Commandes</div>
+<div class="tab" onclick="showTab('stats')">Statistiques</div>
+<div class="tab" onclick="showTab('abonnement')">Abonnement</div>
+</div>
+<div id="p-shops" class="panel on">
+<h3>Mes boutiques</h3>
+<div id="shopsList"></div>
+<hr style="margin:16px 0;border:none;border-top:1px solid #f1f5f9">
+<h3>Creer une boutique</h3>
+<label>Nom de la boutique</label><input id="s-name" placeholder="Chez Awa">
+<label>Description</label><input id="s-desc" placeholder="Mode et accessoires">
+<label>Telephone</label><input id="s-phone" placeholder="77 000 00 00">
+<label>Adresse</label><input id="s-addr" placeholder="Dakar, Senegal">
+<label>Frais livraison Dakar (FCFA)</label><input id="s-fd" type="number" value="1000">
+<label>Frais livraison regions (FCFA)</label><input id="s-fr" type="number" value="2000">
+<button onclick="createShop()">Creer la boutique</button>
+<div id="msg-shops" class="msg"></div>
+</div>
+<div id="p-products" class="panel">
+<h3>Produits</h3>
+<label>Boutique</label><select id="prod-shop"></select>
+<div id="productsList"></div>
+<hr style="margin:16px 0;border:none;border-top:1px solid #f1f5f9">
+<h3>Ajouter un produit</h3>
+<label>Nom</label><input id="p-name" placeholder="Robe wax">
+<label>Prix (FCFA)</label><input id="p-price" type="number" placeholder="12000">
+<label>Stock</label><input id="p-stock" type="number" value="1">
+<label>Description</label><input id="p-desc" placeholder="Description courte">
+<button onclick="createProduct()">Ajouter</button>
+<div id="msg-products" class="msg"></div>
+</div>
+<div id="p-orders" class="panel">
+<h3>Commandes recues</h3>
+<label>Boutique</label><select id="ord-shop"></select>
+<div id="ordersList"></div>
+</div>
+<div id="p-stats" class="panel">
+<h3>Statistiques</h3>
+<label>Boutique</label><select id="st-shop"></select>
+<div id="statsBox"><p style="color:#888">Choisissez une boutique pour voir ses statistiques reelles.</p></div>
+</div>
+<div id="p-abonnement" class="panel">
+<h3>Mon abonnement</h3>
+<div id="subStatus"></div>
+<div id="subPlans"></div>
+<div id="subHist"></div>
+</div>
+</main>
+<script>
+var U=null,SHOPS=[],SEL=null;
+function $(id){return document.getElementById(id);}
+function fmt(n){return new Intl.NumberFormat('fr-SN').format(n)+' FCFA';}
+function api(p,o){return fetch(p,o).then(function(r){return r.json().then(function(d){if(r.status===401){location.href='/login.html';throw 0;}return d;});});}
+function init(){
+  api('/api/auth/me').then(function(d){U=d.user;if(!U){location.href='/login.html';return;}
+  if(U.admin){location.href='/admin.html';return;}
+  $('who').textContent='('+U.name+')';loadShops();loadSub();});
+}
+function loadShops(){
+  api('/api/shops').then(function(d){SHOPS=d.shops;
+  var sels=['prod-shop','ord-shop','st-shop'];
+  sels.forEach(function(s){var e=$(s);e.innerHTML='<option value="">Choisir...</option>'+SHOPS.map(function(x){return '<option value="'+x.id+'">'+x.name+'</option>';}).join('');e.onchange=function(){SEL=e.value;refreshTab();};});
+  $('shopsList').innerHTML=SHOPS.length?SHOPS.map(function(s){return '<div class="sub-box"><b>'+s.name+'</b> <span class="badge '+(s.active?'b-ok':'b-off')+'">'+(s.active?'Publiee':'Inactive')+'</span><br><small style="color:#666">Lien public : /boutique.html?slug='+s.slug+' - Livraison Dakar '+fmt(s.fee_dakar)+' / Regions '+fmt(s.fee_regions)+'</small></div>';}).join(''):'<p style="color:#888">Aucune boutique. Creez-en une ci-dessous.</p>';});
+}
+function refreshTab(){if(SEL){loadProducts();loadOrders();loadStats();}}
+function showTab(t){
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('on');});
+  document.querySelector('[onclick="showTab(\''+t+'\')"]').classList.add('on');
+  Array.prototype.forEach.call(document.querySelectorAll('.panel'),function(x){x.classList.remove('on');});
+  $('p-'+t).classList.add('on');
+  if(t==='products'&&SEL)loadProducts();
+  if(t==='orders'&&SEL)loadOrders();
+  if(t==='stats'&&SEL)loadStats();
+}
+function createShop(){
+  var b={name:$('s-name').value,description:$('s-desc').value,phone:$('s-phone').value,address:$('s-addr').value,feeDakar:+$('s-fd').value,feeRegions:+$('s-fr').value};
+  api('/api/shops',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(d){var m=$('msg-shops');
+  if(d.ok){m.className='msg ok';m.textContent='Boutique creee ! Lien public : /boutique.html?slug='+d.shop.slug;loadShops();}
+  else{m.className='msg err';m.textContent=d.error||'Erreur';}});
+}
+function loadProducts(){
+  if(!SEL)return;
+  api('/api/shops/'+SEL+'/products').then(function(d){var ps=d.products;
+  $('productsList').innerHTML=ps.length?'<table><tr><th>Nom</th><th>Prix</th><th>Stock</th><th>Actif</th></tr>'+ps.map(function(p){return '<tr><td>'+p.name+'</td><td>'+fmt(p.price)+'</td><td>'+(p.stock>0?p.stock:'Rupture')+'</td><td>'+(p.active?'oui':'non')+'</td></tr>';}).join('')+'</table>':'<p style="color:#888;margin-top:10px">Aucun produit dans cette boutique.</p>';});
+}
+function createProduct(){
+  if(!SEL){alert('Choisissez une boutique.');return;}
+  var b={name:$('p-name').value,price:+$('p-price').value,stock:+$('p-stock').value,description:$('p-desc').value};
+  api('/api/shops/'+SEL+'/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(d){var m=$('msg-products');
+  if(d.ok){m.className='msg ok';m.textContent='Produit ajoute.';$('p-name').value='';$('p-price').value='';$('p-stock').value=1;$('p-desc').value='';loadProducts();}
+  else{m.className='msg err';m.textContent=d.error||'Erreur';}});
+}
+function loadOrders(){
+  if(!SEL)return;
+  api('/api/shops/'+SEL+'/orders').then(function(d){var os=d.orders;
+  var lab={en_attente:'b-wait',confirmee:'b-info',livree:'b-ok',annulee:'b-off'};
+  var pay={non_paye:'b-off',en_attente_paiement:'b-wait',payee:'b-ok'};
+  $('ordersList').innerHTML=os.length?'<table><tr><th>Code</th><th>Client</th><th>Total</th><th>Paiement</th><th>Statut</th><th>Action</th></tr>'+os.map(function(o){return '<tr><td>'+o.code+'</td><td>'+o.customer_name+'</td><td>'+fmt(o.total)+'</td><td><span class="badge '+pay[o.payment_status]+'">'+o.payment_status+'</span></td><td><span class="badge '+lab[o.status]+'">'+o.status+'</span></td><td><button class="small" onclick="setStatus('+o.id+',\''+next(o.status)+'\')">'+next(o.status)+'</button></td></tr>';}).join('')+'</table>':'<p style="color:#888;margin-top:10px">Aucune commande pour cette boutique.</p>';});
+}
+function next(s){return s==='en_attente'?'confirmee':(s==='confirmee'?'livree':'annulee');}
+function setStatus(id,st){
+  api('/api/shops/'+SEL+'/orders/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:st})}).then(function(){loadOrders();});
+}
+function kpi(v,l){return '<div class="kpi"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>';}
+function loadStats(){
+  if(!SEL)return;
+  api('/api/shops/'+SEL+'/stats').then(function(d){var s=d.stats;
+  $('statsBox').innerHTML='<div class="kpis">'+
+   kpi(s.totalOrders,'Commandes')+kpi(s.delivered,'Livrees')+kpi(s.cancelled,'Annulees')+kpi(s.pending,'En attente')+
+   kpi(fmt(s.confirmedCA),'CA confirme')+kpi(s.outOfStock,'Ruptures stock')+
+   kpi(s.visitsToday,'Visites aujourd hui')+kpi(s.visits7,'Visites 7 j')+kpi(s.visits30,'Pages vues 30 j')+
+   kpi(s.unique30,'Visiteurs uniques 30 j')+kpi(s.conversion+'%','Taux conversion')+
+   '</div><p style="color:#888;font-size:.75rem;margin-top:10px">Taux de conversion : '+s.conversionDefinition+'</p>'+
+   (s.topProducts.length?'<h4 style="margin-top:14px">Produits les plus consultes (30 j)</h4><ul>'+s.topProducts.map(function(p){return '<li>'+p.name+' : '+p.v+' vues</li>';}).join('')+'</ul>':'')+
+   (s.byDay.length?'<h4 style="margin-top:14px">Visites par jour (30 j)</h4><table><tr><th>Jour</th><th>Vues</th><th>Uniques</th></tr>'+s.byDay.map(function(d2){return '<tr><td>'+d2.d+'</td><td>'+d2.v+'</td><td>'+d2.u+'</td></tr>';}).join('')+'</table>':'<p style="color:#888">Aucune visite enregistree pour le moment.</p>');});
+}
+function loadSub(){
+  api('/api/me/subscription').then(function(d){
+  $('subStatus').innerHTML=d.subscription?'<div class="sub-box"><span class="badge b-ok">Abonnement actif</span> - formule '+d.subscription.plan+' - jusqu au '+String(d.subscription.ends_at).slice(0,10)+'</div>':'<div class="sub-box"><span class="badge b-wait">Aucun abonnement actif</span> - creez votre boutique, puis choisissez une formule.</div>';});
+  api('/api/me/subscriptions').then(function(h){
+  $('subHist').innerHTML=h.subscriptions.length?'<h4 style="margin-top:16px">Historique</h4><table><tr><th>Formule</th><th>Montant</th><th>Statut</th><th>Reference</th></tr>'+h.subscriptions.map(function(s){return '<tr><td>'+s.plan+'</td><td>'+fmt(s.amount)+'</td><td><span class="badge '+(s.status==='actif'?'b-ok':(s.status==='rejete'?'b-off':'b-wait'))+'">'+s.status+'</span></td><td>'+(s.pay_ref||'-')+'</td></tr>';}).join('')+'</table>':'';});
+}
+function subscribe(plan){
+  api('/api/subscriptions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:plan})}).then(function(d){
+  if(!d.ok){alert(d.error);return;}
+  var ref=prompt(d.payment.instructions+'\n\nEntrez la reference de votre transaction (ex : TX123456) :');
+  if(!ref)return;
+  api('/api/subscriptions/'+d.subscriptionId+'/payref',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reference:ref})}).then(function(r){alert(r.ok?r.message:'Erreur: '+(r.error||''));loadSub();});});
+}
+function logout(){fetch('/api/auth/logout',{method:'POST'}).then(function(){location.href='/';});}
+$('subPlans').innerHTML='<div class="sub-box"><b>Formules</b><br><button onclick="subscribe(\'1mois\')">1 mois - 2 500 FCFA</button> <button onclick="subscribe(\'2mois\')">2 mois - 5 000 FCFA</button></div>';
+init();
+</script>
+</body>
+</html>

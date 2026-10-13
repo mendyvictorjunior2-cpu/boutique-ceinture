@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recu de commande - Shopara</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#f7f8fc;color:#1a1a2e;padding:20px}
+.receipt{max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+.logo{text-align:center;font-size:24px;font-weight:800;color:#4f46e5;margin-bottom:4px}
+.logo span{color:#fbbf24}
+h2{text-align:center;font-size:1.1rem;margin-bottom:16px}
+.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #e5e7eb;font-size:.92rem}
+.row b{font-weight:600}
+.total{display:flex;justify-content:space-between;padding:10px 0;font-size:1.15rem;font-weight:800;color:#4f46e5}
+.badge{padding:4px 12px;border-radius:999px;font-size:.8rem;font-weight:700;display:inline-block}
+.b-ok{background:#f0fdf4;color:#166534}.b-wait{background:#fffbeb;color:#b45309}.b-off{background:#fef2f2;color:#b91c1c}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.9rem}
+th,td{padding:7px;border-bottom:1px solid #f1f5f9;text-align:left}
+.note{margin-top:14px;padding:10px;background:#fffbeb;border-radius:8px;color:#92400e;font-size:.82rem}
+.actions{text-align:center;margin-top:20px}
+button{background:#4f46e5;color:#fff;border:none;border-radius:10px;padding:12px 22px;font-weight:700;font-size:.95rem;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="receipt" id="box">
+<div class="logo">Shop<span>ara</span></div>
+<h2>Recu de commande</h2>
+<div id="content"><p style="text-align:center;color:#888">Chargement...</p></div>
+<div class="actions"><button onclick="window.print()">Telecharger / Imprimer le recu</button></div>
+</div>
+<script>
+var code=new URLSearchParams(location.search).get('code');
+var PAY={wave:'Wave',om:'Orange Money',livraison:'Paiement a la livraison'};
+var PAYS={payee:['b-ok','Paye'],en_attente_paiement:['b-wait','En attente de verification'],non_paye:['b-off','Non regle (a la livraison)']};
+var ST={en_attente:['b-wait','En attente'],confirmee:['b-info','Confirmee'],livree:['b-ok','Livree'],annulee:['b-off','Annulee']};
+fetch('/api/public/order/'+code).then(function(r){return r.json();}).then(function(d){
+  if(!d.order){document.getElementById('content').innerHTML='<p style="text-align:center;color:#b91c1c">Commande introuvable. Verifiez le numero.</p>';return;}
+  var o=d.order,p=PAYS[o.payment_status],s=ST[o.status];
+  document.getElementById('content').innerHTML=
+  '<div class="row"><b>Boutique</b><span>'+o.shop_name+'</span></div>'+
+  '<div class="row"><b>Coordonnees boutique</b><span>'+(o.shop_phone||'-')+' '+(o.shop_address||'')+'</span></div>'+
+  '<div class="row"><b>Numero de commande</b><span>'+o.code+'</span></div>'+
+  '<div class="row"><b>Date</b><span>'+o.created_at+'</span></div>'+
+  '<table><tr><th>Produit</th><th>Qte</th><th>Prix</th></tr>'+d.items.map(function(i){return '<tr><td>'+i.name+'</td><td>'+i.qty+'</td><td>'+fmt(i.price)+'</td></tr>';}).join('')+'</table>'+
+  '<div class="row" style="margin-top:6px"><b>Frais de livraison</b><span>'+fmt(o.delivery_fee)+'</span></div>'+
+  '<div class="total"><span>Total</span><span>'+fmt(o.total)+'</span></div>'+
+  '<div class="row"><b>Mode de paiement</b><span>'+(PAY[o.payment_mode]||o.payment_mode)+'</span></div>'+
+  '<div class="row"><b>Statut du paiement</b><span class="badge '+p[0]+'">'+p[1]+'</span></div>'+
+  '<div class="row"><b>Statut de la commande</b><span class="badge '+s[0]+'">'+s[1]+'</span></div>'+
+  (o.payment_status!=='payee'?'<div class="note">Ce recu n atteste pas d un paiement confirme. Le paiement sera verifie par le vendeur. Un paiement a la livraison reste non regle jusqu a confirmation.</div>':'');
+});
+function fmt(n){return new Intl.NumberFormat('fr-SN').format(n)+' FCFA';}
+</script>
+</body>
+</html>

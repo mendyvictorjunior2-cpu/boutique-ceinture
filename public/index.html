@@ -1,127 +1,57 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Boutique — Ceinture Chauffante Menstruelle</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopara - Creez votre boutique en ligne</title>
 <style>
-  * { box-sizing: border-box; margin: 0; font-family: system-ui, sans-serif; }
-  body { background: #fdf2f8; color: #111827; }
-  .wrap { max-width: 720px; margin: auto; padding: 16px; }
-  header { background: linear-gradient(135deg,#be185d,#9d174d); color:#fff; padding: 24px 16px; text-align:center; border-radius: 0 0 24px 24px; }
-  h1 { font-size: 1.4rem; }
-  .card { background: #fff; border-radius: 16px; padding: 20px; margin-top: 14px; box-shadow: 0 2px 10px rgba(157,23,77,.08); }
-  .prix { font-size: 1.8rem; color: #be185d; font-weight: 700; }
-  .stock { background:#f0fdf4; color:#166534; padding:6px 10px; border-radius:8px; display:inline-block; margin-top:8px; font-size:.9rem; }
-  label { display:block; margin-top:12px; font-weight:600; font-size:.95rem; }
-  input, select { width:100%; padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-top:6px; font-size:1rem; }
-  .total { font-size:1.2rem; font-weight:700; margin-top:16px; color:#111827; }
-  button { width:100%; padding:14px; margin-top:16px; background:#be185d; color:#fff; border:none; border-radius:12px; font-size:1.1rem; font-weight:700; cursor:pointer; }
-  button:disabled { background:#d1d5db; }
-  .msg { margin-top:12px; padding:12px; border-radius:10px; display:none; }
-  .ok { background:#f0fdf4; color:#166534; display:block; }
-  .err { background:#fef2f2; color:#b91c1c; display:block; }
-  #instructions { display:none; }
-  #instructions ol { margin:10px 0 0 20px; }
-  #instructions li { margin-top:8px; font-size:.95rem; }
-  footer { text-align:center; color:#9ca3af; font-size:.8rem; padding:20px; }
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#f7f8fc;color:#1a1a2e}
+header{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+.logo{font-size:22px;font-weight:800}
+.logo span{color:#fbbf24}
+nav a{color:#fff;text-decoration:none;margin-left:16px;font-size:15px}
+.hero{padding:60px 20px;text-align:center;background:linear-gradient(180deg,#eef0ff,#f7f8fc)}
+.hero h1{font-size:clamp(28px,5vw,44px);max-width:700px;margin:0 auto 14px}
+.hero p{color:#555;max-width:560px;margin:0 auto 28px;font-size:17px;line-height:1.5}
+.btn{display:inline-block;background:#4f46e5;color:#fff;border:none;border-radius:10px;padding:14px 28px;font-size:16px;font-weight:600;cursor:pointer;text-decoration:none}
+.btn:hover{background:#4338ca}
+.btn.ghost{background:transparent;color:#4f46e5;border:2px solid #4f46e5}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;max-width:1000px;margin:40px auto;padding:0 20px}
+.card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.card h3{margin-bottom:8px}
+.card p{color:#666;font-size:14px;line-height:1.5}
+.pricing{max-width:800px;margin:50px auto;padding:0 20px;text-align:center}
+.plan{display:inline-block;background:#fff;border-radius:16px;padding:26px;margin:10px;box-shadow:0 3px 14px rgba(0,0,0,.08);width:260px;vertical-align:top}
+.plan .price{font-size:32px;font-weight:800;color:#4f46e5;margin:10px 0}
+footer{padding:30px 20px;text-align:center;color:#888;font-size:13px}
 </style>
 </head>
 <body>
 <header>
-  <h1>🌸 Ceinture Chauffante Menstruelle</h1>
-  <p>Chaleur apaisante USB rechargeable — 3 niveaux — tissu doux lavable</p>
+<div class="logo">Shop<span>ara</span></div>
+<nav><a href="/login.html">Connexion</a><a href="/register.html" style="background:#fff;color:#4f46e5;border-radius:8px;padding:8px 14px;font-weight:600">Creer un compte</a></nav>
 </header>
-<div class="wrap">
-  <div class="card">
-    <div class="prix" id="prix">9 900 FCFA</div>
-    <p id="description" style="margin-top:8px;"></p>
-    <div class="stock" id="stock"></div>
-    <label>Quantité <input id="qte" type="number" min="1" value="1" /></label>
-    <label>Ville <input id="ville" placeholder="Dakar / Thiès / Saint-Louis..." /></label>
-    <label>Quartier <input id="quartier" placeholder="Votre quartier" /></label>
-    <label>Nom complet <input id="nom" placeholder="Prénom et nom" /></label>
-    <label>Téléphone <input id="tel" placeholder="77 000 00 00" /></label>
-    <label>Mode de paiement
-      <select id="mode">
-        <option value="paiement_livraison">Paiement à la livraison</option>
-        <option value="wave">Wave</option>
-        <option value="orange_money">Orange Money</option>
-      </select>
-    </label>
-    <div class="total" id="totalAvant">Total à payer : …</div>
-    <button onclick="commander()">Commander</button>
-    <div id="msg" class="msg"></div>
-    <div id="instructions" class="card">
-      <h3>💳 Instructions de paiement</h3>
-      <ol id="etapesPaiement"></ol>
-    </div>
-  </div>
+<section class="hero">
+<h1>Lancez votre boutique en ligne en quelques minutes</h1>
+<p>Shopara permet aux vendeurs du Senegal de creer leur boutique, gerer leurs produits, recevoir des commandes et suivre leurs ventes. Paiement par Wave et Orange Money.</p>
+<a href="/register.html" class="btn">Ouvrir ma boutique</a>
+<a href="/retrouver-recu.html" class="btn ghost">Retrouver mon recu</a>
+</section>
+<div class="cards">
+<div class="card"><h3>Boutique personnalisee</h3><p>Nom, lien public unique, frais de livraison Dakar et regions.</p></div>
+<div class="card"><h3>Produits et stock</h3><p>Prix en FCFA, stock, ruptures gerees automatiquement.</p></div>
+<div class="card"><h3>Commandes et recus</h3><p>Numero unique et recu imprimable pour chaque acheteur. Aucune fausse confirmation de paiement.</p></div>
+<div class="card"><h3>Statistiques</h3><p>Visiteurs, commandes, chiffre d affaires confirme, taux de conversion, uniquement pour votre boutique.</p></div>
 </div>
-<footer>© 2026 — Boutique Ceinture Chauffante. Paiements Wave &amp; Orange Money vérifiés manuellement sous 1 h.</footer>
-
+<div class="pricing">
+<h2>Abonnement simple</h2>
+<div class="plan"><h3>1 mois</h3><div class="price">2 500 FCFA</div><p>30 jours</p><a href="/register.html" class="btn">Commencer</a></div>
+<div class="plan"><h3>2 mois</h3><div class="price">5 000 FCFA</div><p>60 jours</p><a href="/register.html" class="btn">Commencer</a></div>
+</div>
+<footer>Shopara - Plateforme de boutiques en ligne - Senegal - 2026</footer>
 <script>
-const fmt = n => new Intl.NumberFormat("fr-SN").format(n) + " FCFA";
-const msg = document.getElementById("msg");
-let P = null;
-
-async function chargerProduit() {
-  P = await fetch("/api/produit").then(r => r.json());
-  document.getElementById("prix").textContent = fmt(P.prix_fcfa);
-  document.getElementById("description").textContent = P.description;
-  document.getElementById("stock").textContent = "En stock : " + P.stock + " unités";
-  majTotal();
-}
-
-async function commander() {
-  msg.className = "msg";
-  const corps = {
-    nom: nom.value, telephone: tel.value, ville: ville.value,
-    quartier: quartier.value, quantite: Number(qte.value), mode_paiement: mode.value
-  };
-  if (!corps.nom || !corps.telephone || !corps.ville || !corps.quartier || !corps.quantite) {
-    msg.className = "err"; msg.textContent = "❗ Veuillez remplir tous les champs.";
-    return;
-  }
-  try {
-    const r = await fetch("/api/commande", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
-    const d = await r.json();
-    if (!r.ok) {
-      msg.className = "err"; msg.textContent = "❗ " + (d.erreur || "Erreur.");
-      if (d.stock_restant !== undefined) document.getElementById("stock").textContent = "En stock : " + d.stock_restant + " unités";
-      return;
-    }
-    if (d.paiement.mode === "manuel") {
-      document.getElementById("instructions").style.display = "block";
-      document.getElementById("etapesPaiement").innerHTML = d.paiement.instructions.map(i => `<li>${i}</li>`).join("");
-      msg.className = "ok";
-      msg.textContent = `✅ Commande #${d.commande.id} créée — en attente de paiement. Total : ${fmt(d.commande.total_fcfa)}.`;
-    } else {
-      location.href = d.paiement.url; // redirection vers Wave/Orange (Phase 2)
-    }
-  } catch (e) {
-    msg.className = "err"; msg.textContent = "❗ Connexion impossible. Réessayez.";
-  }
-}
-
-document.getElementById("qte").addEventListener("change", majTotal);
-document.getElementById("ville").addEventListener("change", majTotal);
-function majTotal() {
-  if (!P) return;
-  const frais = ville.value.trim().toLowerCase() === "dakar" ? 1000 : 2000;
-  const q = Number(qte.value) || 1;
-  document.getElementById("totalAvant").textContent = `Total à payer : ${fmt(P.prix_fcfa * q + frais)} (dont livraison ${fmt(frais)})`;
-}
-
-// Retour navigateur depuis Wave/Orange : JAMAIS une preuve — on interroge le serveur.
-if (new URLSearchParams(location.search).get("paiement") === "retour") {
-  const cmd = new URLSearchParams(location.search).get("cmd");
-  const verif = setInterval(async () => {
-    const s = await fetch(`/api/paiements/statut/${cmd}`).then(r => r.json());
-    if (s.statut_paiement === "payee") { clearInterval(verif); alert("✅ Paiement confirmé ! Commande #" + cmd + " payée."); }
-  }, 3000);
-}
-
-chargerProduit();
+fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'accueil'})}).catch(function(){});
 </script>
 </body>
 </html>

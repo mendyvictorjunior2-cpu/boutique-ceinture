@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retrouver mon recu - Shopara</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:linear-gradient(135deg,#eef0ff,#f7f8fc);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{background:#fff;border-radius:16px;padding:30px;max-width:440px;width:100%;box-shadow:0 4px 20px rgba(79,70,229,.15);text-align:center}
+.logo{font-size:26px;font-weight:800;color:#4f46e5;margin-bottom:10px}
+.logo span{color:#fbbf24}
+p{color:#666;font-size:.95rem;line-height:1.5}
+input{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;font-size:1rem;margin-top:14px;text-align:center}
+button{background:#4f46e5;color:#fff;border:none;border-radius:10px;padding:13px 24px;font-weight:700;font-size:1rem;cursor:pointer;margin-top:14px;width:100%}
+</style>
+</head>
+<body>
+<div class="box">
+<div class="logo">Shop<span>ara</span></div>
+<p>Entrez le numero de votre commande (ex : SHP-XXXX-XXXX) pour consulter et telecharger votre recu.</p>
+<input id="code" placeholder="SHP-..."><button onclick="go()">Voir mon recu</button>
+</div>
+<script>
+function go(){var c=document.getElementById('code').value.trim();if(c){location.href='/recu.html?code='+encodeURIComponent(c);}}
+</script>
+</body>
+</html>
