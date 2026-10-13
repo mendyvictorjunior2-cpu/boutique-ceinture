@@ -1,121 +1,119 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tableau de bord — Admin</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopara - Administration</title>
 <style>
-  * { box-sizing: border-box; margin: 0; font-family: system-ui, sans-serif; }
-  body { background: #f3f4f6; color: #111827; }
-  .wrap { max-width: 960px; margin: auto; padding: 20px; }
-  .card { background: #fff; border-radius: 12px; padding: 20px; margin-top: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .stat { background: #fdf2f8; border-radius: 12px; padding: 16px; text-align: center; }
-  .stat b { font-size: 1.6rem; color: #be185d; display: block; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: .9rem; }
-  select { padding: 6px; border-radius: 6px; }
-  input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #d1d5db; margin-top: 8px; }
-  button { width: 100%; padding: 12px; margin-top: 8px; background: #be185d; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-  .hidden { display: none; }
-  .err { color: #dc2626; margin-top: 8px; }
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#f7f8fc;color:#1a1a2e}
+header{background:#111827;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+.logo{font-weight:800;font-size:20px}
+.logo span{color:#fbbf24}
+.hbtn{background:rgba(255,255,255,.15);border:none;color:#fff;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:14px}
+main{max-width:1000px;margin:20px auto;padding:0 16px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tab{padding:10px 16px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;color:#555}
+.tab.on{background:#111827;color:#fff;border-color:#111827}
+.panel{display:none;background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+.panel.on{display:block}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:#f8fafc;border-radius:10px;padding:12px}
+.kpi .v{font-size:1.4rem;font-weight:800;color:#111827}
+.kpi .l{font-size:.75rem;color:#777}
+.kpi.rev .v{color:#059669}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:.85rem}
+th,td{padding:8px;border-bottom:1px solid #f1f5f9;text-align:left}
+.badge{padding:3px 10px;border-radius:999px;font-size:.72rem;font-weight:700;display:inline-block}
+.b-ok{background:#f0fdf4;color:#166534}.b-wait{background:#fffbeb;color:#b45309}.b-off{background:#fef2f2;color:#b91c1c}
+button{background:#111827;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:.85rem;cursor:pointer;margin:4px 2px}
+input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;margin-top:4px;font-size:1rem}
+label{display:block;font-weight:600;margin-top:10px;font-size:.9rem}
+h4{margin-top:16px}
+@media(max-width:600px){table{font-size:.75rem}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <!-- Connexion -->
-  <div class="card" id="login">
-    <h2>🔐 Connexion Admin</h2>
-    <input id="user" placeholder="Utilisateur" />
-    <input id="pass" type="password" placeholder="Mot de passe" />
-    <button onclick="login()">Se connecter</button>
-    <p id="lmsg" class="err"></p>
-  </div>
-
-  <!-- Panneau admin -->
-  <div class="hidden" id="panel">
-    <div class="card stats">
-      <div class="stat"><b id="s-ca">—</b>Chiffre d'affaires</div>
-      <div class="stat"><b id="s-cmd">—</b>Commandes</div>
-      <div class="stat"><b id="s-u">—</b>Unités vendues</div>
-      <div class="stat"><b id="s-stock">—</b>Stock restant</div>
-    </div>
-
-    <div class="card">
-      <h3>📦 Commandes</h3>
-      <table>
-        <thead><tr><th>#</th><th>Client</th><th>Ville</th><th>Qté</th><th>Total</th><th>Paiement</th><th>Statut</th><th>Action</th></tr></thead>
-        <tbody id="liste"></tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h3>⚙️ Produit</h3>
-      <label>Prix (FCFA) <input id="p-prix" type="number" min="0" /></label>
-      <label>Stock <input id="p-stock" type="number" min="0" /></label>
-      <button onclick="majProduit()">Mettre à jour</button>
-      <p id="pmsg" class="err"></p>
-    </div>
-  </div>
+<header>
+<div class="logo">Shop<span>ara</span> <small style="font-weight:400;font-size:.8rem">Administration</small></div>
+<div><a href="/" class="hbtn" style="text-decoration:none">Accueil</a> <button class="hbtn" onclick="logout()">Deconnexion</button></div>
+</header>
+<main>
+<div class="tabs">
+<div class="tab on" onclick="showTab('stats')">Statistiques</div>
+<div class="tab" onclick="showTab('users')">Utilisateurs</div>
+<div class="tab" onclick="showTab('shops')">Boutiques</div>
+<div class="tab" onclick="showTab('subs')">Abonnements</div>
+<div class="tab" onclick="showTab('settings')">Reglages</div>
 </div>
-
+<div id="p-stats" class="panel on"><h3>Vue d ensemble</h3><div id="statsBox"><p style="color:#888">Chargement...</p></div></div>
+<div id="p-users" class="panel"><h3>Utilisateurs</h3><div id="usersBox"></div></div>
+<div id="p-shops" class="panel"><h3>Boutiques</h3><div id="shopsBox"></div></div>
+<div id="p-subs" class="panel"><h3>Abonnements et paiements</h3><p style="color:#666;font-size:.85rem">Validez un abonnement uniquement apres avoir reellement verifie la transaction (reference Wave/Orange Money).</p><div id="subsBox"></div><h4>Export</h4><a href="/api/admin/export/subscriptions.csv" style="color:#4f46e5">Telecharger les abonnements (CSV)</a></div>
+<div id="p-settings" class="panel">
+<h3>Reglages de la plateforme</h3>
+<label>Numero de paiement des abonnements (Wave/OM)</label><input id="set-num">
+<label>Tarif 1 mois (FCFA)</label><input id="set-p1" type="number">
+<label>Tarif 2 mois (FCFA)</label><input id="set-p2" type="number">
+<button onclick="saveSettings()">Enregistrer</button>
+<div id="msg-set" style="margin-top:10px;color:#166534;display:none">Enregistre.</div>
+</div>
+</main>
 <script>
-const fmt = n => new Intl.NumberFormat("fr-SN").format(n) + " FCFA";
-let P = null;
-
-async function login() {
-  const r = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user: user.value, pass: pass.value }) });
-  const d = await r.json();
-  if (d.ok) { document.getElementById("login").classList.add("hidden"); panel.classList.remove("hidden"); rafraichir(); }
-  else document.getElementById("lmsg").textContent = "Identifiants incorrects.";
+function $(id){return document.getElementById(id);}
+function fmt(n){return new Intl.NumberFormat('fr-SN').format(n)+' FCFA';}
+function api(p,o){return fetch(p,o).then(function(r){return r.json().then(function(d){if(r.status===401||r.status===403){location.href='/login.html';throw 0;}return d;});});}
+function init(){
+  api('/api/auth/me').then(function(d){if(!d.user||!d.user.admin){location.href='/login.html';return;}loadStats();loadUsers();loadShops();loadSubs();loadSettings();});
 }
-
-async function rafraichir() {
-  const s = await fetch("/api/admin/stats").then(r => r.json());
-  if (s.erreur) return document.getElementById("lmsg").textContent = s.erreur;
-  s-ca.textContent = fmt(s.chiffre_affaires);
-  s-cmd.textContent = s.commandes;
-  s-u.textContent = s.unites_vendues;
-  s-stock.textContent = s.stock_restant;
-
-  const cs = await fetch("/api/admin/commandes").then(r => r.json());
-  liste.innerHTML = cs.map(c => `<tr>
-    <td>${c.id}</td><td>${c.nom}<br><small>${c.telephone}</small></td><td>${c.ville}</td>
-    <td>${c.quantite}</td><td>${fmt(c.total_fcfa)}</td><td>${c.mode_paiement}<br><small>${c.statut_paiement || "—"}</small></td>
-    <td><select onchange="majStatut(${c.id}, this.value)">
-      <option value="payee" ${c.statut_paiement==="payee"?"selected":""}>Payée</option>
-      <option value="en_attente_paiement" ${c.statut_paiement==="en_attente_paiement"?"selected":""}>En attente paiement</option>
-      <option value="confirmee" ${c.statut_paiement==="confirmee"?"selected":""}>Confirmée</option>
-      <option value="livree" ${c.statut_paiement==="livree"?"selected":""}>Livrée</option>
-      <option value="annulee" ${c.statut_paiement==="annulee"?"selected":""}>Annulée</option>
-    </select></td>
-    <td><button style="width:auto;padding:6px 10px" onclick="rafraichir()">↻</button></td>
-  </tr>`).join("");
-
-  P = await fetch("/api/produit").then(r => r.json());
-  p-prix.value = P.prix_fcfa; p-stock.value = P.stock;
+function showTab(t){
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.remove('on');});
+  document.querySelector('[onclick="showTab(\''+t+'\')"]').classList.add('on');
+  Array.prototype.forEach.call(document.querySelectorAll('.panel'),function(x){x.classList.remove('on');});
+  $('p-'+t).classList.add('on');
 }
-
-async function majStatut(id, statut) {
-  const r = await fetch(`/api/admin/commande/${id}/statut`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ statut }) });
-  const d = await r.json();
-  if (!d.ok) alert("Erreur : " + (d.erreur || "?"));
-  rafraichir();
+function kpi(v,l,rev){return '<div class="kpi'+(rev?' rev':'')+'"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>';}
+function loadStats(){
+  api('/api/admin/stats').then(function(d){var s=d.stats;
+  $('statsBox').innerHTML='<div class="kpis">'+
+  kpi(s.users,'Utilisateurs')+kpi(s.shops,'Boutiques')+kpi(s.activeShops,'Publiees')+kpi(s.products,'Produits')+
+  kpi(s.orders,'Commandes')+kpi(s.pendingOrders,'En attente')+kpi(s.deliveredOrders,'Livrees')+kpi(s.cancelledOrders,'Annulees')+
+  '</div><h4>Traffic</h4><div class="kpis">'+
+  kpi(s.visitsTotal,'Pages vues totales')+kpi(s.uniqueTotal,'Visiteurs uniques estimes')+kpi(s.visitsToday,'Visites aujourd hui')+kpi(s.visits7d,'Visites 7 j')+kpi(s.visits30d,'Visites 30 j')+
+  '</div><h4>Abonnements et revenus Shopara</h4><div class="kpis">'+
+  kpi(s.activeSubs,'Abonnements actifs')+kpi(s.expiredSubs,'Expires')+kpi(s.pendingSubs,'En attente de verification')+
+  kpi(fmt(s.revenueConfirmed),'Revenus confirmes',1)+kpi(fmt(s.revenuePending),'En attente',1)+
+  kpi(fmt(s.revenueToday),'Revenus aujourd hui',1)+kpi(fmt(s.revenue7d),'Revenus 7 j',1)+kpi(fmt(s.revenue30d),'Revenus 30 j',1)+
+  '</div>'+
+  (s.topPages.length?'<h4>Pages les plus visitees</h4><table><tr><th>Page</th><th>Vues</th></tr>'+s.topPages.map(function(p){return '<tr><td>'+p.page+'</td><td>'+p.v+'</td></tr>';}).join('')+'</table>':'')+
+  (s.signupsByDay.length?'<h4>Inscriptions par jour (30 j)</h4><table><tr><th>Jour</th><th>Inscriptions</th></tr>'+s.signupsByDay.map(function(r){return '<tr><td>'+r.d+'</td><td>'+r.c+'</td></tr>';}).join('')+'</table>':'<p style="color:#888;font-size:.85rem">Aucune inscription recente.</p>')+
+  (s.shopsByDay.length?'<h4>Boutiques creees par jour (30 j)</h4><table><tr><th>Jour</th><th>Boutiques</th></tr>'+s.shopsByDay.map(function(r){return '<tr><td>'+r.d+'</td><td>'+r.c+'</td></tr>';}).join('')+'</table>':'');
+  });
 }
-
-async function majProduit() {
-  const r = await fetch("/api/admin/produit", { method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prix_fcfa: Number(p-prix.value), stock: Number(p-stock.value) }) });
-  const d = await r.json();
-  pmsg.textContent = d.ok ? "✅ Produit mis à jour." : "❗ " + d.erreur;
-  if (d.ok) rafraichir();
+function loadUsers(){
+  api('/api/admin/users').then(function(d){
+  $('usersBox').innerHTML='<table><tr><th>Nom</th><th>Email</th><th>Telephone</th><th>Statut</th><th>Inscrit le</th><th>Action</th></tr>'+d.users.map(function(u){return '<tr><td>'+u.name+'</td><td>'+u.email+'</td><td>'+(u.phone||'-')+'</td><td>'+(u.suspended===-1?'Admin':(u.suspended===1?'Suspendu':'Actif'))+'</td><td>'+u.created_at+'</td><td>'+(u.suspended===0?'<button onclick="suspend('+u.id+')">Suspendre</button>':(u.suspended===1?'<button onclick="suspend('+u.id+')">Reactiver</button>':''))+'</td></tr>';}).join('')+'</table>';});
 }
-
-// Auto-connexion si session déjà active
-(async () => {
-  const s = await fetch("/api/admin/stats").then(r => r.json());
-  if (!s.erreur) { login.classList.add("hidden"); panel.classList.remove("hidden"); rafraichir(); }
-})();
+function suspend(id){api('/api/admin/users/'+id+'/suspend',{method:'PUT'}).then(function(){loadUsers();});}
+function loadShops(){
+  api('/api/admin/shops').then(function(d){
+  $('shopsBox').innerHTML='<table><tr><th>Boutique</th><th>Vendeur</th><th>Lien</th><th>Statut</th><th>Action</th></tr>'+d.shops.map(function(s){return '<tr><td>'+s.name+'</td><td>'+s.user_name+'</td><td>/boutique.html?slug='+s.slug+'</td><td>'+(s.active?'Publiee':'Inactive')+'</td><td><button onclick="toggleShop('+s.id+')">'+(s.active?'Desactiver':'Activer')+'</button></td></tr>';}).join('')+'</table>';});
+}
+function toggleShop(id){api('/api/admin/shops/'+id+'/active',{method:'PUT'}).then(function(){loadShops();});}
+function loadSubs(){
+  api('/api/admin/subscriptions').then(function(d){
+  $('subsBox').innerHTML='<table><tr><th>ID</th><th>Vendeur</th><th>Formule</th><th>Montant</th><th>Statut</th><th>Reference paiement</th><th>Echeance</th><th>Actions</th></tr>'+d.subscriptions.map(function(s){return '<tr><td>'+s.id+'</td><td>'+s.user_name+'</td><td>'+s.plan+'</td><td>'+fmt(s.amount)+'</td><td><span class="badge '+(s.status==='actif'?'b-ok':(s.status==='rejete'?'b-off':'b-wait'))+'">'+s.status+'</span></td><td>'+(s.pay_ref||'-')+'</td><td>'+(s.ends_at?String(s.ends_at).slice(0,10):'-')+'</td><td>'+(s.status==='actif'?'':(s.status==='rejete'?'':'<button onclick="valSub('+s.id+')">Valider</button> <button onclick="rejSub('+s.id+')">Rejeter</button>'))+'</td></tr>';}).join('')+'</table>';});
+}
+function valSub(id){if(!confirm('Confirmez uniquement si vous avez verifie la transaction reelle (Wave/OM). Valider cet abonnement ?'))return;api('/api/admin/subscriptions/'+id+'/validate',{method:'PUT'}).then(function(d){alert(d.ok?'Abonnement active.':'Erreur: '+(d.error||''));loadSubs();loadStats();});}
+function rejSub(id){api('/api/admin/subscriptions/'+id+'/reject',{method:'PUT'}).then(function(){loadSubs();});}
+function loadSettings(){
+  api('/api/admin/settings').then(function(d){$('set-num').value=d.settings.abonnement_numero||'';$('set-p1').value=d.settings.plan_1mois||2500;$('set-p2').value=d.settings.plan_2mois||5000;});
+}
+function saveSettings(){
+  api('/api/admin/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({abonnement_numero:$('set-num').value,plan_1mois:+$('set-p1').value,plan_2mois:+$('set-p2').value})}).then(function(){$('msg-set').style.display='block';});
+}
+function logout(){fetch('/api/auth/logout',{method:'POST'}).then(function(){location.href='/';});}
+init();
 </script>
 </body>
 </html>
