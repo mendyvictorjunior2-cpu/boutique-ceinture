@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boutique - Shopara</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#f7f8fc;color:#1a1a2e}
+header{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:24px 16px;text-align:center}
+header h1{font-size:1.4rem}
+header p{opacity:.85;margin-top:4px;font-size:.9rem}
+main{max-width:760px;margin:16px auto;padding:0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.prod{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.prod h3{font-size:1rem}
+.prod .price{color:#4f46e5;font-weight:800;font-size:1.1rem;margin:6px 0}
+.prod p{color:#666;font-size:.85rem}
+.prod input{width:70px;padding:8px;border:1px solid #d1d5db;border-radius:8px}
+.prod button{background:#4f46e5;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;margin-top:8px}
+#cart{background:#fff;border-radius:14px;padding:18px;margin-top:18px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+label{display:block;font-weight:600;margin-top:10px;font-size:.9rem}
+input,select{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:8px;margin-top:4px;font-size:1rem}
+.total{font-size:1.15rem;font-weight:800;margin-top:14px}
+button.big{width:100%;background:#4f46e5;color:#fff;border:none;border-radius:10px;padding:14px;font-size:1.05rem;font-weight:800;cursor:pointer;margin-top:12px}
+.msg{margin-top:10px;padding:10px;border-radius:8px;display:none;font-size:.9rem}
+.ok{background:#f0fdf4;color:#166534;display:block}
+.err{background:#fef2f2;color:#b91c1c;display:block}
+footer{padding:24px;text-align:center;color:#999;font-size:.8rem}
+</style>
+</head>
+<body>
+<header>
+<h1 id="shopName">Boutique</h1>
+<p id="shopDesc"></p>
+</header>
+<main>
+<div class="grid" id="products"></div>
+<div id="cart" style="display:none">
+<h3>Ma commande</h3>
+<div id="cartItems"></div>
+<label>Nom complet</label><input id="c-name" placeholder="Prenom et nom">
+<label>Telephone</label><input id="c-phone" placeholder="77 000 00 00">
+<label>Adresse de livraison</label><input id="c-addr" placeholder="Quartier, ville">
+<label>Zone</label><select id="c-zone"><option value="dakar">Dakar</option><option value="regions">Regions</option></select>
+<label>Mode de paiement</label><select id="c-pay"><option value="wave">Wave</option><option value="om">Orange Money</option><option value="livraison">Paiement a la livraison</option></select>
+<div class="total" id="total"></div>
+<button class="big" onclick="order()">Commander</button>
+<div id="msg" class="msg"></div>
+</div>
+</main>
+<footer>Paiement verifie manuellement - aucune confirmation automatique. Shopara 2026</footer>
+<script>
+var slug=new URLSearchParams(location.search).get('slug');
+var SHOP=null,CART={};
+function $(id){return document.getElementById(id);}
+function fmt(n){return new Intl.NumberFormat('fr-SN').format(n)+' FCFA';}
+function init(){
+  if(!slug){$('products').innerHTML='<p>Boutique introuvable (lien incorrect).</p>';return;}
+  fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'boutique',shopId:0,slug:slug})}).catch(function(){});
+  fetch('/api/public/shop/'+slug).then(function(r){return r.json();}).then(function(d){
+    if(!d.shop){$('products').innerHTML='<p>Cette boutique n existe pas ou n est pas publiee.</p>';return;}
+    SHOP=d.shop;document.title=d.shop.name+' - Shopara';
+    $('shopName').textContent=d.shop.name;$('shopDesc').textContent=d.shop.description||'';
+    fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'boutique',shopId:SHOP.id})}).catch(function(){});
+    $('products').innerHTML=d.products.map(function(p){return '<div class="prod"><h3>'+p.name+'</h3><div class="price">'+fmt(p.price)+'</div><p>'+(p.description||'')+'</p><p style="margin-top:6px">Stock : '+p.stock+'</p><label>Quantite</label><input id="q-'+p.id+'" type="number" min="1" max="'+p.stock+'" value="1"><br><button onclick="add('+p.id+')">Ajouter au panier</button></div>';}).join('')||'<p>Aucun produit disponible.</p>';
+  });
+}
+function add(pid){
+  var q=+$('q-'+pid).value;var p=findProd(pid);
+  if(!p||q<1||q>p.stock){alert('Quantite invalide.');return;}
+  CART[pid]=(CART[pid]||0)+q;render();
+}
+function findProd(pid){return _prods.filter(function(p){return p.id===pid;})[0];}
+var _prods=[];
+function setProds(ps){_prods=ps;}
+function render(){
+  var ids=Object.keys(CART);
+  $('cart').style.display=ids.length?'block':'none';
+  if(!ids.length)return;
+  var html='',total=0;
+  ids.forEach(function(id){var p=findProd(+id);if(!p)return;total+=p.price*CART[id];html+='<div>'+p.name+' x '+CART[id]+' = '+fmt(p.price*CART[id])+'</div>';});
+  var fee=$('c-zone').value==='dakar'?SHOP.fee_dakar:SHOP.fee_regions;
+  total+=fee;
+  $('cartItems').innerHTML=html;
+  $('total').textContent='Total (avec livraison '+fmt(fee)+') : '+fmt(total);
+}
+function order(){
+  var items=Object.keys(CART).map(function(id){return {productId:+id,qty:CART[id]};});
+  if(!items.length){return;}
+  var b={customerName:$('c-name').value,customerPhone:$('c-phone').value,address:$('c-addr').value,zone:$('c-zone').value,items:items,paymentMode:$('c-pay').value};
+  if(!b.customerName||!b.customerPhone||!b.address){var m=$('msg');m.className='msg err';m.textContent='Remplissez nom, telephone et adresse.';return;}
+  fetch('/api/public/shop/'+slug+'/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}).then(function(d){
+    var m=$('msg');
+    if(!d.ok){m.className='msg err';m.textContent=d.error||'Erreur';return;}
+    location.href='/recu.html?code='+d.order.code;
+  });
+}
+$('c-zone').onchange=render;
+init();
+</script>
+</body>
+</html>
