@@ -1,190 +1,174 @@
-// ============================================================
-// Boutique Ceinture Chauffante Menstruelle — 9 900 FCFA
-// Serveur Node.js/Express + SQLite
-// Paiements : Wave / Orange Money (mode manuel sécurisé) + paiement à la livraison
-// ============================================================
-const express = require("express");
-const session = require("express-session");
-const SQLiteStore = require("connect-sqlite3")(session);
-const Database = require("better-sqlite3");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-const path = require("path");
-const fs = require("fs");
-const paiements = require("./paiements");
+// server.js - Shopara SaaS server (multi-vendeurs)
+'use strict';
+const path = require('path');
+const express = require('express');
+const helmet = require('helmet');
+const session = require('express-session');
+const rateLimit = require('express-rate-limit');
+const SQLiteStore = require('connect-sqlite3')(session);
+const db = require('./db');
+const { hashMotDePasse, verifierMotDePasse, genererNumeroCommande, slugify } = require('./auth');
+const paiements = require('./paiements');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ---------- Sécurité ----------
+app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: "50kb" }));
-app.use(express.static(path.join(__dirname, "public")));
-
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(session({
-  store: new SQLiteStore({ db: "sessions.db" }),
-  secret: process.env.SESSION_SECRET || "dev-secret-change-me",
+  name: 'shopara.sid',
+  secret: process.env.SESSION_SECRET || 'shopara-dev-secret-change-me',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 60 * 60 * 8 }
+  store: new SQLiteStore({ db: 'sessions.db', dir: process.env.SHOPARA_DATA_DIR || path.join(__dirname, 'data') }),
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 1000 * 60 * 60 * 24 * 7
+  }
 }));
 
-const limiterGlobal = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
-const limiterCommande = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
-const limiterLogin = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
-app.use("/api/", limiterGlobal);
+// ---------- Rate limiting ----------
+const limiteGenerale = rateLimit({ windowMs: 15 * 60 * 1000, max: 300 });
+const limiteAuth = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { erreur: 'Trop de tentatives, reessayez plus tard.' } });
+const limiteVisites = rateLimit({ windowMs: 60 * 1000, max: 60 });
+const limiteCommandes = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
+app.use(limiteGenerale);
 
-// ---------- Base de données ----------
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-const db = new Database(path.join(DATA_DIR, "boutique.db"));
-db.pragma("journal_mode = WAL");
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS produit (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  nom TEXT NOT NULL, prix_fcfa INTEGER NOT NULL,
-  description TEXT NOT NULL, stock INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS commande (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nom TEXT NOT NULL, telephone TEXT NOT NULL, ville TEXT NOT NULL,
-  quartier TEXT NOT NULL, quantite INTEGER NOT NULL,
-  mode_paiement TEXT NOT NULL, statut_paiement TEXT DEFAULT NULL,
-  total_fcfa INTEGER NOT NULL, creee_le TEXT DEFAULT (datetime('now'))
-);
-`);
-
-// Produit auto-créé (permet de survivre aux redéploiements du plan gratuit)
-db.prepare(`INSERT OR IGNORE INTO produit (id, nom, prix_fcfa, description, stock)
-VALUES (1, 'Ceinture Chauffante Menstruelle', 9900,
-'Ceinture de chaleur USB rechargeable, 3 niveaux de chaleur, tissu doux lavable. Soulage les douleurs menstruelles en 10 minutes.', 10)`).run();
-
-const FRAIS_DAKAR = 1000, FRAIS_REGIONS = 2000;
-
-function fraisLivraison(ville) { return String(ville).trim().toLowerCase() === "dakar" ? FRAIS_DAKAR : FRAIS_REGIONS; }
-function verifierStock(quantite) {
-  const p = db.prepare("SELECT stock FROM produit WHERE id=1").get();
-  if (!p || p.stock < quantite) return { ok: false, restant: p ? p.stock : 0 };
-  return { ok: true, restant: p.stock };
+// ---------- Helpers ----------
+function utilisateurCourant(req) {
+  if (!req.session.vendeurId) return null;
+  const v = db.prepare('SELECT id, email, nom, telephone, role, suspendu FROM vendeurs WHERE id = ?').get(req.session.vendeurId);
+  if (!v || v.suspendu) return null;
+  return v;
+}
+function exigeConnexion(req, res, next) {
+  if (!utilisateurCourant(req)) return res.status(401).json({ erreur: 'Connexion requise.' });
+  next();
+}
+function exigeAdmin(req, res, next) {
+  const u = utilisateurCourant(req);
+  if (!u || u.role !== 'admin') return res.status(403).json({ erreur: 'Acces admin requis.' });
+  next();
+}
+function parametre(cle, defaut) {
+  const r = db.prepare('SELECT valeur FROM parametres WHERE cle = ?').get(cle);
+  return r ? r.valeur : defaut;
+}
+function abonnementActif(vendeurId) {
+  return db.prepare("SELECT * FROM abonnements WHERE vendeur_id = ? AND statut_paiement = 'payee' AND date_fin >= date('now') ORDER BY date_fin DESC LIMIT 1").get(vendeurId);
 }
 
-// ---------- API publique ----------
-app.get("/api/produit", (req, res) => {
-  const p = db.prepare("SELECT nom, prix_fcfa, description, stock FROM produit WHERE id=1").get();
-  const paiement = paiements.configure();
-  res.json({ ...p, frais_dakar: FRAIS_DAKAR, frais_regions: FRAIS_REGIONS,
-    paiement, instructions_manuelles: paiement.configure ? null : paiements.instructionsManuelles() });
-});
-
-app.post("/api/commande", limiterCommande, (req, res) => {
-  const { nom, telephone, ville, quartier, quantite, mode_paiement } = req.body || {};
-  if (!nom || !telephone || !ville || !quartier || !quantite || quantite < 1) {
-    return res.status(400).json({ erreur: "Champs manquants ou invalides." });
+// ---------- Visites (tracking pages publiques) ----------
+app.post('/api/visite', limiteVisites, (req, res) => {
+  const { chemin, boutiqueSlug, produitId } = req.body || {};
+  let boutiqueId = null;
+  if (boutiqueSlug) {
+    const b = db.prepare('SELECT id FROM boutiques WHERE slug = ?').get(String(boutiqueSlug).slice(0, 50));
+    if (b) boutiqueId = b.id;
   }
-  if (!["paiement_livraison", "wave", "orange_money", "wave_manuel", "orange_money_manuel"].includes(mode_paiement)) {
-    return res.status(400).json({ erreur: "Mode de paiement inconnu." });
-  }
-  const st = verifierStock(quantite);
-  if (!st.ok) return res.status(409).json({ erreur: "Stock insuffisant.", stock_restant: st.restant });
-
-  const prix = db.prepare("SELECT prix_fcfa FROM produit WHERE id=1").get().prix_fcfa;
-  const total = prix * quantite + fraisLivraison(ville);
-
-  // En mode manuel, la commande naît "en attente de paiement" — JAMAIS "payee".
-  let statutPaiement = null;
-  if (mode_paiement !== "paiement_livraison") statutPaiement = "en_attente_paiement";
-
-  const info = db.prepare(`INSERT INTO commande (nom, telephone, ville, quartier, quantite, mode_paiement, statut_paiement, total_fcfa)
-  VALUES (?,?,?,?,?,?,?,?)`).run(nom, telephone, ville, quartier, quantite, mode_paiement, statutPaiement, total);
-
-  const paiement = paiements.configure();
-  res.status(201).json({
-    commande: { id: info.lastInsertRowid, total_fcfa: total, statut_paiement: statutPaiement },
-    paiement: paiement.configure ? { mode: "api", ...paiement } : { mode: "manuel", instructions: paiements.instructionsManuelles() }
-  });
-});
-
-app.get("/api/paiements/statut/:id", (req, res) => {
-  const c = db.prepare("SELECT statut_paiement FROM commande WHERE id=?").get(req.params.id);
-  if (!c) return res.status(404).json({ erreur: "Commande inconnue." });
-  res.json({ statut_paiement: c.statut_paiement });
-});
-
-// ---------- Webhooks (Phase 2, actifs uniquement avec les clés API officielles) ----------
-app.post("/api/webhooks/wave", (req, res) => {
-  res.status(202).end(); // accusé immédiat ; vérification asynchrone contre l'API Wave (jamais le corps seul)
-  paiements.webhookWave(req.body, (id, statut) => {
-    if (statut === "payee") {
-      const c = db.prepare("SELECT quantite FROM commande WHERE id=?").get(id);
-      if (c) db.prepare("UPDATE produit SET stock = stock - ? WHERE id=1 AND stock >= ?").run(c.quantite, c.quantite);
-    }
-    db.prepare("UPDATE commande SET statut_paiement=? WHERE id=?").run(statut, id);
-  });
-});
-app.post("/api/webhooks/orange", (req, res) => {
-  res.status(202).end();
-  paiements.webhookOrange(req.body, (id, statut) => {
-    if (statut === "payee") {
-      const c = db.prepare("SELECT quantite FROM commande WHERE id=?").get(id);
-      if (c) db.prepare("UPDATE produit SET stock = stock - ? WHERE id=1 AND stock >= ?").run(c.quantite, c.quantite);
-    }
-    db.prepare("UPDATE commande SET statut_paiement=? WHERE id=?").run(statut, id);
-  });
-});
-
-// ---------- Admin ----------
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "admin2026";
-
-app.post("/api/admin/login", limiterLogin, (req, res) => {
-  const { user, pass } = req.body || {};
-  if (user === ADMIN_USER && pass === ADMIN_PASS) {
-    req.session.admin = true;
-    return res.json({ ok: true });
-  }
-  res.status(401).json({ erreur: "Identifiants incorrects." });
-});
-
-function adminRequis(req, res, next) {
-  if (req.session && req.session.admin) return next();
-  res.status(403).json({ erreur: "Accès admin requis." });
-}
-
-app.get("/api/admin/stats", adminRequis, (req, res) => {
-  const ca = db.prepare(`SELECT COALESCE(SUM(total_fcfa),0) AS t FROM commande WHERE statut_paiement='payee' OR statut_paiement IS NULL`).get().t;
-  const commandes = db.prepare("SELECT COUNT(*) AS n FROM commande").get().n;
-  const unites = db.prepare("SELECT COALESCE(SUM(quantite),0) AS u FROM commande WHERE statut_paiement='payee' OR statut_paiement IS NULL").get().u;
-  const stock = db.prepare("SELECT stock FROM produit WHERE id=1").get().stock;
-  res.json({ chiffre_affaires: ca, commandes: commandes, unites_vendues: unites, stock_restant: stock });
-});
-
-app.get("/api/admin/commandes", adminRequis, (req, res) => {
-  res.json(db.prepare("SELECT * FROM commande ORDER BY id DESC").all());
-});
-
-app.post("/api/admin/commande/:id/statut", adminRequis, (req, res) => {
-  // Confirmer un paiement manuel APRÈS vérification dans le portefeuille — responsabilité admin.
-  const { statut } = req.body || {};
-  if (!["payee", "echoue", "annule", "confirmee", "livree", "annulee"].includes(statut)) {
-    return res.status(400).json({ erreur: "Statut invalide." });
-  }
-  const c = db.prepare("SELECT quantite, statut_paiement FROM commande WHERE id=?").get(req.params.id);
-  if (!c) return res.status(404).json({ erreur: "Commande inconnue." });
-  if (statut === "payee" && c.statut_paiement !== "payee") {
-    db.prepare("UPDATE produit SET stock = stock - ? WHERE id=1 AND stock >= ?").run(c.quantite, c.quantite);
-  }
-  db.prepare("UPDATE commande SET statut_paiement=? WHERE id=?").run(statut, req.params.id);
+  db.prepare('INSERT INTO visites (boutique_id, page, chemin, session_id, referent, produit_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(boutiqueId, String(chemin || '/').slice(0, 120), String(chemin || '/').slice(0, 200),
+         (req.sessionID || '').slice(0, 64), String(req.headers.referer || '').slice(0, 200),
+         Number(produitId) || null);
   res.json({ ok: true });
 });
 
-app.put("/api/admin/produit", adminRequis, (req, res) => {
-  const { prix_fcfa, stock } = req.body || {};
-  if (typeof prix_fcfa !== "number" || typeof stock !== "number") {
-    return res.status(400).json({ erreur: "prix_fcfa et stock sont requis (nombres)." });
-  }
-  db.prepare("UPDATE produit SET prix_fcfa=?, stock=? WHERE id=1").run(Math.round(prix_fcfa), Math.round(stock));
+// ---------- Public: accueil Shopara + annuaire des boutiques ----------
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.get('/api/boutiques', (req, res) => {
+  const boutiques = db.prepare('SELECT id, slug, nom, description, telephone FROM boutiques WHERE publiee = 1 ORDER BY cree_le DESC').all();
+  res.json(boutiques);
+});
+
+// ---------- Auth ----------
+app.post('/api/inscription', limiteAuth, (req, res) => {
+  const { email, motDePasse, nom, telephone } = req.body || {};
+  if (!email || !motDePasse || !nom || !telephone) return res.status(400).json({ erreur: 'Tous les champs sont requis.' });
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email));
+  if (!emailOk) return res.status(400).json({ erreur: 'Email invalide.' });
+  if (String(motDePasse).length < 8) return res.status(400).json({ erreur: 'Mot de passe: 8 caracteres minimum.' });
+  if (db.prepare('SELECT id FROM vendeurs WHERE email = ?').get(String(email).toLowerCase())) return res.status(409).json({ erreur: 'Email deja utilise.' });
+  const r = db.prepare('INSERT INTO vendeurs (email, mot_de_passe_hash, nom, telephone) VALUES (?, ?, ?, ?)')
+    .run(String(email).toLowerCase(), hashMotDePasse(String(motDePasse)), String(nom).slice(0, 80), String(telephone).slice(0, 20));
+  req.session.vendeurId = r.lastInsertRowid;
+  res.json({ ok: true, vendeur: { id: r.lastInsertRowid, email: String(email).toLowerCase(), nom } });
+});
+app.post('/api/connexion', limiteAuth, (req, res) => {
+  const { email, motDePasse } = req.body || {};
+  const v = db.prepare('SELECT * FROM vendeurs WHERE email = ?').get(String(email || '').toLowerCase());
+  if (!v || !verifierMotDePasse(String(motDePasse || ''), v.mot_de_passe_hash)) return res.status(401).json({ erreur: 'Identifiants incorrects.' });
+  if (v.suspendu) return res.status(403).json({ erreur: 'Compte suspendu.' });
+  db.prepare('UPDATE vendeurs SET derniere_connexion = datetime("now") WHERE id = ?').run(v.id);
+  req.session.vendeurId = v.id;
+  res.json({ ok: true, vendeur: { id: v.id, email: v.email, nom: v.nom, role: v.role } });
+});
+app.post('/api/deconnexion', (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
+});
+app.get('/api/moi', (req, res) => {
+  const u = utilisateurCourant(req);
+  if (!u) return res.status(401).json({ erreur: 'Non connecte.' });
+  const abo = abonnementActif(u.id);
+  res.json({ vendeur: u, abonnement: abo || null });
+});
+
+// ---------- Boutiques (vendeur) ----------
+app.post('/api/boutiques', exigeConnexion, (req, res) => {
+  const { nom, description, telephone, email, adresse } = req.body || {};
+  if (!nom) return res.status(400).json({ erreur: 'Le nom de la boutique est requis.' });
+  const u = utilisateurCourant(req);
+  const nb = db.prepare('SELECT COUNT(*) c FROM boutiques WHERE vendeur_id = ?').get(u.id).c;
+  if (nb >= 3) return res.status(403).json({ erreur: 'Maximum 3 boutiques par compte (offre gratuite).' });
+  let slug = slugify(nom);
+  const existe = db.prepare('SELECT id FROM boutiques WHERE slug = ?').get(slug);
+  if (existe) slug = slug + '-' + Math.random().toString(36).slice(2, 6);
+  const r = db.prepare('INSERT INTO boutiques (vendeur_id, slug, nom, description, telephone, email, adresse) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(u.id, slug, String(nom).slice(0, 80), String(description || '').slice(0, 500),
+         String(telephone || '').slice(0, 20), String(email || '').slice(0, 80), String(adresse || '').slice(0, 200));
+  res.json({ ok: true, boutique: { id: r.lastInsertRowid, slug, nom } });
+});
+app.get('/api/mes-boutiques', exigeConnexion, (req, res) => {
+  const u = utilisateurCourant(req);
+  res.json(db.prepare('SELECT * FROM boutiques WHERE vendeur_id = ?').all(u.id));
+});
+app.put('/api/boutiques/:id', exigeConnexion, (req, res) => {
+  const u = utilisateurCourant(req);
+  const b = db.prepare('SELECT * FROM boutiques WHERE id = ?').get(Number(req.params.id));
+  if (!b || b.vendeur_id !== u.id) return res.status(404).json({ erreur: 'Boutique introuvable.' });
+  const f = req.body || {};
+  db.prepare('UPDATE boutiques SET nom = ?, description = ?, telephone = ?, email = ?, adresse = ?, frais_livraison_dakar = ?, frais_livraison_regions = ?, instructions_paiement = ?, publiee = ? WHERE id = ?')
+    .run(String(f.nom || b.nom).slice(0, 80), String(f.description || b.description).slice(0, 500),
+         String(f.telephone || b.telephone).slice(0, 20), String(f.email || b.email).slice(0, 80),
+         String(f.adresse || b.adresse).slice(0, 200),
+         Number(f.frais_livraison_dakar) || b.frais_livraison_dakar, Number(f.frais_livraison_regions) || b.frais_livraison_regions,
+         String(f.instructions_paiement || b.instructions_paiement).slice(0, 500),
+         f.publiee === false ? 0 : 1, b.id);
   res.json({ ok: true });
 });
 
-app.listen(PORT, () => console.log(`Boutique en ligne sur le port ${PORT}`));
+// ---------- Produits ----------
+app.post('/api/boutiques/:id/produits', exigeConnexion, (req, res) => {
+  const u = utilisateurCourant(req);
+  const b = db.prepare('SELECT * FROM boutiques WHERE id = ?').get(Number(req.params.id));
+  if (!b || b.vendeur_id !== u.id) return res.status(404).json({ erreur: 'Boutique introuvable.' });
+  const { nom, description, prix, stock } = req.body || {};
+  if (!nom || prix === undefined) return res.status(400).json({ erreur: 'Nom et prix requis.' });
+  const prixN = Number(prix);
+  if (!Number.isInteger(prixN) || prixN < 0) return res.status(400).json({ erreur: 'Prix invalide (entier en FCFA).' });
+  const r = db.prepare('INSERT INTO produits (boutique_id, nom, description, prix, stock, image_url) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(b.id, String(nom).slice(0, 80), String(description || '').slice(0, 500), prixN,
+         Math.max(0, Number(stock) || 0), String((req.body || {}).image_url || '').slice(0, 300));
+  res.json({ ok: true, produit: { id: r.lastInsertRowid, nom, prix: prixN, stock: Math.max(0, Number(stock) || 0) } });
+});
+app.get('/api/boutiques/:id/produits', exigeConnexion, (req, res) => {
+  const u = utilisateurCourant(req);
+  const b = db.prepare('SELECT vendeur_id FROM boutiques WHERE id = ?').get(Number(req.params.id));
+  if (!b || b.vendeur_id !== u.id) return res.status(404).json({ erreur: 'Boutique introuvable.' });
+  res.json(db.prepare('SELECT * FROM produits WHERE boutique_id = ?').all(b.id ? Number(req.params.id) : 0));
+});
