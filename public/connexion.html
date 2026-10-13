@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopara - Connexion</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#0f172a;color:#e2e8f0;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:1rem}
+.card{background:#1e293b;padding:2rem;border-radius:16px;width:100%;max-width:420px}
+h1{font-size:1.5rem;margin-bottom:1rem}
+label{display:block;margin:.8rem 0 .3rem;font-size:.9rem;color:#94a3b8}
+input{width:100%;padding:.7rem;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0}
+button{width:100%;margin-top:1.2rem;padding:.8rem;border:none;border-radius:8px;background:#0ea5e9;color:#fff;font-weight:700;font-size:1rem;cursor:pointer}
+.erreur{color:#f87171;margin-top:.8rem;font-size:.9rem}
+a{color:#38bdf8}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Connexion vendeur</h1>
+<form id="f">
+<label>Email</label><input id="email" type="email" required>
+<label>Mot de passe</label><input id="motDePasse" type="password" required>
+<button type="submit">Se connecter</button>
+</form>
+<p class="erreur" id="err"></p>
+<p style="margin-top:1rem;font-size:.9rem">Pas de compte ? <a href="/inscription">S'inscrire</a></p>
+</div>
+<script>
+document.getElementById('f').addEventListener('submit', async (e) => {
+e.preventDefault();
+const err = document.getElementById('err');
+err.textContent = '';
+const r = await fetch('/api/connexion', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: email.value, motDePasse: motDePasse.value }) });
+const d = await r.json();
+if (r.ok) location.href = '/dashboard';
+else err.textContent = d.error || 'Erreur';
+});
+</script>
+</body>
+</html>
