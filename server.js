@@ -1,9 +1,9 @@
 // ============================================================
-// SHOPARA - SaaS de boutiques en ligne (Senegal) - v2.0
-// Point d'entree : assemble les modules
+// SHOPARA v2.0 - point d entree
 // ============================================================
 'use strict';
 const path = require('path');
+const express = require('express');
 const db = require('./lib/db');
 const { createApp } = require('./lib/app');
 
@@ -16,7 +16,6 @@ require('./lib/routes-orders')(app, db);
 require('./lib/routes-subs')(app, db);
 require('./lib/routes-admin')(app, db);
 
-// Pages statiques + fallback
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Route inconnue' });
