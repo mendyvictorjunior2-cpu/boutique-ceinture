@@ -1,190 +1,191 @@
-// ============================================================
-// Boutique Ceinture Chauffante Menstruelle — 9 900 FCFA
-// Serveur Node.js/Express + SQLite
-// Paiements : Wave / Orange Money (mode manuel sécurisé) + paiement à la livraison
-// ============================================================
-const express = require("express");
-const session = require("express-session");
-const SQLiteStore = require("connect-sqlite3")(session);
-const Database = require("better-sqlite3");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-const path = require("path");
-const fs = require("fs");
-const paiements = require("./paiements");
+const express = require('express');
+const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
+const crypto = require('crypto');
+const db = require('./db');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// ---------- Sécurité ----------
+app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: "50kb" }));
-app.use(express.static(path.join(__dirname, "public")));
-
+app.use(express.json({ limit: '200kb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(session({
-  store: new SQLiteStore({ db: "sessions.db" }),
-  secret: process.env.SESSION_SECRET || "dev-secret-change-me",
-  resave: false,
-  saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 60 * 60 * 8 }
+  store: new SQLiteStore({ db: 'sessions.db' }),
+  secret: process.env.SESSION_SECRET || 'shopara-dev-secret-a-changer',
+  resave: false, saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto', maxAge: 24*60*60*1000 }
 }));
 
-const limiterGlobal = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
-const limiterCommande = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
-const limiterLogin = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
-app.use("/api/", limiterGlobal);
+const limiterGlobal = rateLimit({ windowMs: 15*60*1000, max: 300 });
+const limiterAuth = rateLimit({ windowMs: 15*60*1000, max: 20, message: { error: 'Trop de tentatives, réessayez dans 15 minutes.' } });
+const limiterPublic = rateLimit({ windowMs: 60*1000, max: 120 });
+app.use('/api/', limiterGlobal);
+app.use('/api/inscription', limiterAuth);
+app.use('/api/connexion', limiterAuth);
 
-// ---------- Base de données ----------
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-const db = new Database(path.join(DATA_DIR, "boutique.db"));
-db.pragma("journal_mode = WAL");
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS produit (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  nom TEXT NOT NULL, prix_fcfa INTEGER NOT NULL,
-  description TEXT NOT NULL, stock INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS commande (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nom TEXT NOT NULL, telephone TEXT NOT NULL, ville TEXT NOT NULL,
-  quartier TEXT NOT NULL, quantite INTEGER NOT NULL,
-  mode_paiement TEXT NOT NULL, statut_paiement TEXT DEFAULT NULL,
-  total_fcfa INTEGER NOT NULL, creee_le TEXT DEFAULT (datetime('now'))
-);
-`);
-
-// Produit auto-créé (permet de survivre aux redéploiements du plan gratuit)
-db.prepare(`INSERT OR IGNORE INTO produit (id, nom, prix_fcfa, description, stock)
-VALUES (1, 'Ceinture Chauffante Menstruelle', 9900,
-'Ceinture de chaleur USB rechargeable, 3 niveaux de chaleur, tissu doux lavable. Soulage les douleurs menstruelles en 10 minutes.', 10)`).run();
-
-const FRAIS_DAKAR = 1000, FRAIS_REGIONS = 2000;
-
-function fraisLivraison(ville) { return String(ville).trim().toLowerCase() === "dakar" ? FRAIS_DAKAR : FRAIS_REGIONS; }
-function verifierStock(quantite) {
-  const p = db.prepare("SELECT stock FROM produit WHERE id=1").get();
-  if (!p || p.stock < quantite) return { ok: false, restant: p ? p.stock : 0 };
-  return { ok: true, restant: p.stock };
+function h(s) { return crypto.createHash('sha256').update('shopara-salt-' + String(s)).digest('hex'); }
+function randomId() { return crypto.randomBytes(8).toString('hex'); }
+function slugify(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'boutique';
+}
+function requireVendeur(req, res, next) {
+  if (!req.session.vendeurId) return res.status(401).json({ error: 'Connectez-vous.' });
+  const u = db.prepare('SELECT * FROM vendeurs WHERE id = ? AND actif = 1').get(req.session.vendeurId);
+  if (!u) return res.status(401).json({ error: 'Compte invalide.' });
+  req.vendeur = u; next();
+}
+function requireAdmin(req, res, next) {
+  if (req.session.isAdmin === true) return next();
+  return res.status(401).json({ error: 'Accès admin requis.' });
+}
+function requireBoutique(req, res, next) {
+  const b = db.prepare('SELECT * FROM boutiques WHERE vendeur_id = ? AND slug = ?').get(req.vendeur.id, req.params.slug);
+  if (!b) return res.status(404).json({ error: 'Boutique introuvable.' });
+  req.boutique = b; next();
+}
+function requireAbonnement(req, res, next) {
+  if (req.session.isAdmin === true) return next();
+  const ab = db.prepare("SELECT * FROM abonnements WHERE boutique_id = ? AND statut = 'actif' AND expire_le >= date('now') ORDER BY expire_le DESC LIMIT 1").get(req.boutique.id);
+  if (!ab) return res.status(402).json({ error: 'Abonnement requis.' });
+  req.abonnement = ab; next();
 }
 
-// ---------- API publique ----------
-app.get("/api/produit", (req, res) => {
-  const p = db.prepare("SELECT nom, prix_fcfa, description, stock FROM produit WHERE id=1").get();
-  const paiement = paiements.configure();
-  res.json({ ...p, frais_dakar: FRAIS_DAKAR, frais_regions: FRAIS_REGIONS,
-    paiement, instructions_manuelles: paiement.configure ? null : paiements.instructionsManuelles() });
+// ===== AUTH =====
+app.post('/api/inscription', (req, res) => {
+  const { nom, email, telephone, motDePasse } = req.body || {};
+  if (!nom || !email || !telephone || !motDePasse) return res.status(400).json({ error: 'Nom, email, téléphone et mot de passe requis.' });
+  if (String(motDePasse).length < 6) return res.status(400).json({ error: 'Mot de passe: 6 caractères minimum.' });
+  const existe = db.prepare('SELECT id FROM vendeurs WHERE email = ?').get(String(email).toLowerCase().trim());
+  if (existe) return res.status(409).json({ error: 'Un compte existe déjà avec cet email.' });
+  const id = randomId();
+  db.prepare('INSERT INTO vendeurs (id, nom, email, telephone, mot_de_passe_hash, actif, cree_le) VALUES (?,?,?,?,?,1,datetime("now"))')
+    .run(id, nom.trim(), String(email).toLowerCase().trim(), String(telephone), h(motDePasse));
+  req.session.vendeurId = id;
+  res.json({ ok: true });
+});
+app.post('/api/connexion', (req, res) => {
+  const { email, motDePasse } = req.body || {};
+  const u = db.prepare('SELECT * FROM vendeurs WHERE email = ?').get(String(email||'').toLowerCase().trim());
+  if (!u || u.mot_de_passe_hash !== h(motDePasse)) return res.status(401).json({ error: 'Email ou mot de passe incorrect.' });
+  if (!u.actif) return res.status(403).json({ error: 'Compte suspendu. Contactez Shopara.' });
+  req.session.vendeurId = u.id;
+  res.json({ ok: true });
+});
+app.post('/api/deconnexion', (req, res) => { req.session.destroy(() => res.json({ ok: true })); });
+app.get('/api/moi', (req, res) => {
+  if (!req.session.vendeurId) return res.json({ connecte: false });
+  const u = db.prepare('SELECT id, nom, email, telephone, cree_le FROM vendeurs WHERE id = ?').get(req.session.vendeurId);
+  if (!u) return res.json({ connecte: false });
+  const bs = db.prepare('SELECT * FROM boutiques WHERE vendeur_id = ?').all(u.id);
+  res.json({ connecte: true, vendeur: u, boutiques: bs });
 });
 
-app.post("/api/commande", limiterCommande, (req, res) => {
-  const { nom, telephone, ville, quartier, quantite, mode_paiement } = req.body || {};
-  if (!nom || !telephone || !ville || !quartier || !quantite || quantite < 1) {
-    return res.status(400).json({ erreur: "Champs manquants ou invalides." });
-  }
-  if (!["paiement_livraison", "wave", "orange_money", "wave_manuel", "orange_money_manuel"].includes(mode_paiement)) {
-    return res.status(400).json({ erreur: "Mode de paiement inconnu." });
-  }
-  const st = verifierStock(quantite);
-  if (!st.ok) return res.status(409).json({ erreur: "Stock insuffisant.", stock_restant: st.restant });
-
-  const prix = db.prepare("SELECT prix_fcfa FROM produit WHERE id=1").get().prix_fcfa;
-  const total = prix * quantite + fraisLivraison(ville);
-
-  // En mode manuel, la commande naît "en attente de paiement" — JAMAIS "payee".
-  let statutPaiement = null;
-  if (mode_paiement !== "paiement_livraison") statutPaiement = "en_attente_paiement";
-
-  const info = db.prepare(`INSERT INTO commande (nom, telephone, ville, quartier, quantite, mode_paiement, statut_paiement, total_fcfa)
-  VALUES (?,?,?,?,?,?,?,?)`).run(nom, telephone, ville, quartier, quantite, mode_paiement, statutPaiement, total);
-
-  const paiement = paiements.configure();
-  res.status(201).json({
-    commande: { id: info.lastInsertRowid, total_fcfa: total, statut_paiement: statutPaiement },
-    paiement: paiement.configure ? { mode: "api", ...paiement } : { mode: "manuel", instructions: paiements.instructionsManuelles() }
-  });
+// ===== BOUTIQUES =====
+app.post('/api/boutiques', requireVendeur, (req, res) => {
+  const { nom, description, telephone, adresse, ville, fraisLivraisonDakar, fraisLivraisonRegions } = req.body || {};
+  if (!nom || !telephone) return res.status(400).json({ error: 'Nom et téléphone de la boutique requis.' });
+  let slug = slugify(nom);
+  if (db.prepare('SELECT id FROM boutiques WHERE slug = ?').get(slug)) slug = slug + '-' + randomId().slice(0,4);
+  db.prepare('INSERT INTO boutiques (id, vendeur_id, slug, nom, description, telephone, adresse, ville, frais_dakar, frais_regions, publiee, cree_le) VALUES (?,?,?,?,?,?,?,?,?,?,0,datetime("now"))')
+    .run(randomId(), req.vendeur.id, slug, nom.trim(), String(description||''), String(telephone), String(adresse||''), String(ville||''), Number(fraisLivraisonDakar||1000), Number(fraisLivraisonRegions||2000));
+  res.json({ ok: true, slug });
 });
-
-app.get("/api/paiements/statut/:id", (req, res) => {
-  const c = db.prepare("SELECT statut_paiement FROM commande WHERE id=?").get(req.params.id);
-  if (!c) return res.status(404).json({ erreur: "Commande inconnue." });
-  res.json({ statut_paiement: c.statut_paiement });
+app.get('/api/mes-boutiques', requireVendeur, (req, res) => {
+  res.json(db.prepare('SELECT * FROM boutiques WHERE vendeur_id = ?').all(req.vendeur.id));
 });
-
-// ---------- Webhooks (Phase 2, actifs uniquement avec les clés API officielles) ----------
-app.post("/api/webhooks/wave", (req, res) => {
-  res.status(202).end(); // accusé immédiat ; vérification asynchrone contre l'API Wave (jamais le corps seul)
-  paiements.webhookWave(req.body, (id, statut) => {
-    if (statut === "payee") {
-      const c = db.prepare("SELECT quantite FROM commande WHERE id=?").get(id);
-      if (c) db.prepare("UPDATE produit SET stock = stock - ? WHERE id=1 AND stock >= ?").run(c.quantite, c.quantite);
-    }
-    db.prepare("UPDATE commande SET statut_paiement=? WHERE id=?").run(statut, id);
-  });
-});
-app.post("/api/webhooks/orange", (req, res) => {
-  res.status(202).end();
-  paiements.webhookOrange(req.body, (id, statut) => {
-    if (statut === "payee") {
-      const c = db.prepare("SELECT quantite FROM commande WHERE id=?").get(id);
-      if (c) db.prepare("UPDATE produit SET stock = stock - ? WHERE id=1 AND stock >= ?").run(c.quantite, c.quantite);
-    }
-    db.prepare("UPDATE commande SET statut_paiement=? WHERE id=?").run(statut, id);
-  });
-});
-
-// ---------- Admin ----------
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "admin2026";
-
-app.post("/api/admin/login", limiterLogin, (req, res) => {
-  const { user, pass } = req.body || {};
-  if (user === ADMIN_USER && pass === ADMIN_PASS) {
-    req.session.admin = true;
-    return res.json({ ok: true });
-  }
-  res.status(401).json({ erreur: "Identifiants incorrects." });
-});
-
-function adminRequis(req, res, next) {
-  if (req.session && req.session.admin) return next();
-  res.status(403).json({ erreur: "Accès admin requis." });
-}
-
-app.get("/api/admin/stats", adminRequis, (req, res) => {
-  const ca = db.prepare(`SELECT COALESCE(SUM(total_fcfa),0) AS t FROM commande WHERE statut_paiement='payee' OR statut_paiement IS NULL`).get().t;
-  const commandes = db.prepare("SELECT COUNT(*) AS n FROM commande").get().n;
-  const unites = db.prepare("SELECT COALESCE(SUM(quantite),0) AS u FROM commande WHERE statut_paiement='payee' OR statut_paiement IS NULL").get().u;
-  const stock = db.prepare("SELECT stock FROM produit WHERE id=1").get().stock;
-  res.json({ chiffre_affaires: ca, commandes: commandes, unites_vendues: unites, stock_restant: stock });
-});
-
-app.get("/api/admin/commandes", adminRequis, (req, res) => {
-  res.json(db.prepare("SELECT * FROM commande ORDER BY id DESC").all());
-});
-
-app.post("/api/admin/commande/:id/statut", adminRequis, (req, res) => {
-  // Confirmer un paiement manuel APRÈS vérification dans le portefeuille — responsabilité admin.
-  const { statut } = req.body || {};
-  if (!["payee", "echoue", "annule", "confirmee", "livree", "annulee"].includes(statut)) {
-    return res.status(400).json({ erreur: "Statut invalide." });
-  }
-  const c = db.prepare("SELECT quantite, statut_paiement FROM commande WHERE id=?").get(req.params.id);
-  if (!c) return res.status(404).json({ erreur: "Commande inconnue." });
-  if (statut === "payee" && c.statut_paiement !== "payee") {
-    db.prepare("UPDATE produit SET stock = stock - ? WHERE id=1 AND stock >= ?").run(c.quantite, c.quantite);
-  }
-  db.prepare("UPDATE commande SET statut_paiement=? WHERE id=?").run(statut, req.params.id);
+app.put('/api/boutiques/:slug', requireVendeur, requireBoutique, (req, res) => {
+  const b = req.body || {};
+  db.prepare('UPDATE boutiques SET nom=?, description=?, telephone=?, adresse=?, ville=?, frais_dakar=?, frais_regions=?, publiee=? WHERE id=?')
+    .run(String(b.nom||req.boutique.nom).trim(), String(b.description||req.boutique.description), String(b.telephone||req.boutique.telephone), String(b.adresse||req.boutique.adresse), String(b.ville||req.boutique.ville), b.fraisLivraisonDakar!==undefined?Number(b.fraisLivraisonDakar):req.boutique.frais_dakar, b.fraisLivraisonRegions!==undefined?Number(b.fraisLivraisonRegions):req.boutique.frais_regions, b.publiee!==undefined?(b.publiee?1:0):req.boutique.publiee, req.boutique.id);
   res.json({ ok: true });
 });
 
-app.put("/api/admin/produit", adminRequis, (req, res) => {
-  const { prix_fcfa, stock } = req.body || {};
-  if (typeof prix_fcfa !== "number" || typeof stock !== "number") {
-    return res.status(400).json({ erreur: "prix_fcfa et stock sont requis (nombres)." });
-  }
-  db.prepare("UPDATE produit SET prix_fcfa=?, stock=? WHERE id=1").run(Math.round(prix_fcfa), Math.round(stock));
+// ===== PRODUITS =====
+app.get('/api/boutiques/:slug/produits', (req, res) => {
+  const b = db.prepare('SELECT * FROM boutiques WHERE slug = ?').get(req.params.slug);
+  if (!b) return res.status(404).json({ error: 'Boutique introuvable.' });
+  res.json(db.prepare('SELECT * FROM produits WHERE boutique_id = ? AND actif = 1 ORDER BY cree_le DESC').all(b.id));
+});
+app.post('/api/boutiques/:slug/produits', requireVendeur, requireBoutique, requireAbonnement, (req, res) => {
+  const { nom, description, prix, stock, imageUrl } = req.body || {};
+  if (!nom || !prix) return res.status(400).json({ error: 'Nom et prix requis.' });
+  if (Number(prix) <= 0) return res.status(400).json({ error: 'Prix invalide.' });
+  const id = randomId();
+  db.prepare('INSERT INTO produits (id, boutique_id, nom, description, prix, stock, image_url, actif, cree_le) VALUES (?,?,?,?,?,?,?,1,datetime("now"))')
+    .run(id, req.boutique.id, nom.trim(), String(description||''), Math.round(Number(prix)), Number(stock||0), String(imageUrl||''));
+  res.json({ ok: true, id });
+});
+app.put('/api/boutiques/:slug/produits/:id', requireVendeur, requireBoutique, requireAbonnement, (req, res) => {
+  const p = db.prepare('SELECT * FROM produits WHERE id = ? AND boutique_id = ?').get(req.params.id, req.boutique.id);
+  if (!p) return res.status(404).json({ error: 'Produit introuvable.' });
+  const b = req.body || {};
+  db.prepare('UPDATE produits SET nom=?, description=?, prix=?, stock=?, image_url=?, actif=? WHERE id=?')
+    .run(String(b.nom||p.nom), String(b.description||p.description), b.prix!==undefined?Math.round(Number(b.prix)):p.prix, b.stock!==undefined?Number(b.stock):p.stock, String(b.imageUrl||p.image_url), b.actif!==undefined?(b.actif?1:0):p.actif, p.id);
   res.json({ ok: true });
 });
 
-app.listen(PORT, () => console.log(`Boutique en ligne sur le port ${PORT}`));
+// ===== COMMANDES PUBLIQUES =====
+app.get('/api/publique/boutique/:slug', limiterPublic, (req, res) => {
+  const b = db.prepare('SELECT id, slug, nom, description, telephone, adresse, ville, frais_dakar, frais_regions FROM boutiques WHERE slug = ? AND publiee = 1').get(req.params.slug);
+  if (!b) return res.status(404).json({ error: 'Boutique introuvable.' });
+  res.json(b);
+});
+app.post('/api/publique/commande', limiterPublic, (req, res) => {
+  const { boutiqueSlug, nomClient, telephone, adresse, ville, zone, modePaiement, items } = req.body || {};
+  const b = db.prepare('SELECT * FROM boutiques WHERE slug = ? AND publiee = 1').get(String(boutiqueSlug||''));
+  if (!b) return res.status(404).json({ error: 'Boutique introuvable.' });
+  if (!nomClient || !telephone || !items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Nom, téléphone et produits requis.' });
+  let total = 0; const lignes = [];
+  for (const it of items) {
+    const p = db.prepare('SELECT * FROM produits WHERE id = ? AND boutique_id = ? AND actif = 1').get(String(it.produitId||''), b.id);
+    if (!p) return res.status(400).json({ error: 'Produit invalide.' });
+    const qte = Math.max(1, Math.min(20, Math.round(Number(it.quantite)||1)));
+    if (p.stock < qte) return res.status(400).json({ error: 'Stock insuffisant pour ' + p.nom + '.' });
+    total += p.prix * qte;
+    lignes.push({ produitId: p.id, nom: p.nom, prixUnitaire: p.prix, quantite: qte });
+  }
+  const frais = (String(zone).toLowerCase().includes('dakar')) ? b.frais_dakar : b.frais_regions;
+  total += frais;
+  const mode = ['wave', 'orange_money', 'paiement_livraison'].includes(modePaiement) ? modePaiement : 'paiement_livraison';
+  const numeroCommande = 'SP-' + Date.now().toString(36).toUpperCase() + '-' + randomId().slice(0,4).toUpperCase();
+  const id = randomId();
+  db.prepare('INSERT INTO commandes (id, boutique_id, numero, nom_client, telephone, adresse, ville, zone, mode_paiement, frais_livraison, total, statut_paiement, statut, cree_le) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,datetime("now"))')
+    .run(id, b.id, numeroCommande, nomClient, String(telephone), String(adresse||''), String(ville||''), String(zone||''), mode, frais, total, 'non_paye', 'en_attente');
+  for (const l of lignes) {
+    db.prepare('INSERT INTO lignes_commande (id, commande_id, produit_id, nom, prix_unitaire, quantite) VALUES (?,?,?,?,?,?)').run(randomId(), id, l.produitId, l.nom, l.prixUnitaire, l.quantite);
+    db.prepare('UPDATE produits SET stock = stock - ? WHERE id = ?').run(l.quantite, l.produitId);
+  }
+  res.json({ ok: true, numeroCommande, total, fraisLivraison: frais, modePaiement: mode });
+});
+
+// ===== REÇU ACHETEUR =====
+app.get('/api/publique/recu/:numero', limiterPublic, (req, res) => {
+  const c = db.prepare('SELECT c.*, b.nom AS boutique_nom, b.telephone AS boutique_tel, b.adresse AS boutique_adresse, b.ville AS boutique_ville FROM commandes c JOIN boutiques b ON b.id = c.boutique_id WHERE c.numero = ?').get(String(req.params.numero||'').trim().toUpperCase());
+  if (!c) return res.status(404).json({ error: 'Commande introuvable.' });
+  const lignes = db.prepare('SELECT nom, prix_unitaire, quantite FROM lignes_commande WHERE commande_id = ?').all(c.id);
+  res.json({
+    numero: c.numero, date: c.cree_le,
+    boutique: { nom: c.boutique_nom, telephone: c.boutique_tel, adresse: c.boutique_adresse, ville: c.boutique_ville },
+    client: { nom: c.nom_client, telephone: c.telephone, ville: c.ville },
+    lignes, fraisLivraison: c.frais_livraison, total: c.total,
+    modePaiement: c.mode_paiement, statutPaiement: c.statut_paiement, statutCommande: c.statut
+  });
+});
+
+// ===== SUIVI DES VISITES =====
+app.get('/api/publique/visite', limiterPublic, (req, res) => {
+  let sid = null;
+  const m = (req.headers.cookie || '').match(/sid=([^;]+)/);
+  if (m) sid = m[1];
+  if (!sid) { sid = 'v-' + randomId(); res.setHeader('Set-Cookie', 'sid=' + sid + '; Path=/; Max-Age=1800; HttpOnly; SameSite=Lax'); }
+  const { page, boutiqueSlug, produitId, referer } = req.query;
+  if (!page || String(page).length > 100) return res.json({ ok: true });
+  let boutiqueId = null;
+  if (boutiqueSlug) { const b = db.prepare('SELECT id FROM boutiques WHERE slug = ?').get(String(boutiqueSlug)); if (b) boutiqueId = b.id; }
+  db.prepare('INSERT INTO visites (page, boutique_id, produit_id, sid, referer, cree_le) VALUES (?,?,?,?,?,datetime("now"))')
+    .run(String(page).slice(0,100), boutiqueId, produitId ? String(produitId).slice(0,40) : null, sid, String(referer||'').slice(0,200));
+  res.json({ ok: true });
+});
