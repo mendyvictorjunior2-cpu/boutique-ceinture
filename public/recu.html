@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopara - Recu</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+body{background:#f1f5f9;color:#0f172a;padding:1rem}
+.recu{background:#fff;max-width:600px;margin:0 auto;padding:2rem;border-radius:12px}
+.entete{text-align:center;border-bottom:2px solid #0f172a;padding-bottom:1rem;margin-bottom:1rem}
+.entete h1{font-size:1.3rem}
+.entete p{color:#475569;font-size:.9rem}
+.grille{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.9rem;margin-bottom:1rem}
+h2{font-size:1rem;margin:.8rem 0 .4rem}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:.45rem;border-bottom:1px solid #e2e8f0;text-align:left}
+td.r,th.r{text-align:right}
+.total{margin-top:.8rem;font-size:1.15rem;font-weight:800;text-align:right}
+.badge{padding:.2rem .7rem;border-radius:8px;font-weight:700;font-size:.85rem;display:inline-block}
+.b-non_paye{background:#fef3c7;color:#92400e}
+.b-paye{background:#dcfce7;color:#166534}
+.b-en_attente{background:#fef3c7;color:#92400e}
+.b-confirmee{background:#dcfce7;color:#166534}
+.b-livree{background:#dbeafe;color:#1e40af}
+.b-annulee{background:#fee2e2;color:#991b1b}
+.actions{text-align:center;margin-top:1.5rem}
+button{padding:.7rem 1.5rem;border:none;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;cursor:pointer}
+.retrouver{text-align:center;margin:2rem 0;color:#475569;font-size:.9rem}
+.retrouver input{padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;margin-right:.3rem}
+.retrouver button{background:#0ea5e9;padding:.55rem 1rem}
+@media print { .actions, .retrouver { display:none } }
+</style>
+</head>
+<body>
+<div id="zone" style="display:none">
+<div class="recu">
+<div class="entete">
+<h1 id="rBoutique"></h1>
+<p id="rBoutiqueInfo"></p>
+</div>
+<div class="grille">
+<div><b>N. de commande</b><br><span id="rNumero"></span></div>
+<div><b>Date</b><br><span id="rDate"></span></div>
+<div><b>Client</b><br><span id="rClient"></span></div>
+<div><b>Telephone</b><br><span id="rTel"></span></div>
+<div><b>Mode de paiement</b><br><span id="rMode"></span></div>
+<div><b>Statut paiement</b><br><span id="rStatutP"></span></div>
+</div>
+<h2>Produits</h2>
+<table><thead><tr><th>Produit</th><th class="r">P.U.</th><th class="r">Qte</th><th class="r">Sous-total</th></tr></thead><tbody id="rLignes"></tbody></table>
+<p class="total">Livraison : <span id="rFrais"></span></p>
+<p class="total">Total : <span id="rTotal"></span></p>
+<p style="margin-top:.8rem">Statut commande : <span id="rStatut"></span></p>
+<div class="actions"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
+</div>
+</div>
+<div class="retrouver" id="retrouver">
+<p><b>Retrouver mon recu</b></p>
+<input id="inNumero" placeholder="Numero de commande (ex: SP-XXXXX-XXXX)">
+<button onclick="aller()">OK</button>
+</div>
+<script>
+const LABELS_MODE = { wave:'Wave', orange_money:'Orange Money', paiement_livraison:'Paiement a la livraison' };
+const numero = location.pathname.split('/')[2];
+async function charger() {
+if (!numero) return;
+const r = await fetch('/api/publique/recu/' + encodeURIComponent(numero));
+if (!r.ok) { document.getElementById('retrouver').insertAdjacentHTML('afterbegin', '<p style="color:#dc2626">Recu introuvable. Verifiez le numero.</p>'); return; }
+const d = await r.json();
+document.getElementById('zone').style.display = 'block';
+rBoutique.textContent = d.boutique.nom;
+rBoutiqueInfo.textContent = (d.boutique.adresse ? d.boutique.adresse + ', ' : '') + (d.boutique.ville || '') + ' - Tel: ' + d.boutique.telephone;
+rNumero.textContent = d.numero;
+rDate.textContent = new Date(d.date + 'Z').toLocaleString('fr-FR');
+rClient.textContent = d.client.nom;
+rTel.textContent = d.client.telephone;
+rMode.textContent = LABELS_MODE[d.modePaiement] || d.modePaiement;
+rStatutP.innerHTML = '<span class="badge b-' + d.statutPaiement + '">' + (d.statutPaiement === 'paye' ? 'PAYE' : 'NON PAYE (a ce jour)') + '</span>';
+rLignes.innerHTML = d.lignes.map(l => '<tr><td>' + l.nom + '</td><td class="r">' + l.prix_unitaire.toLocaleString('fr-FR') + ' F</td><td class="r">' + l.quantite + '</td><td class="r">' + (l.prix_unitaire*l.quantite).toLocaleString('fr-FR') + ' F</td></tr>').join('');
+rFrais.textContent = d.fraisLivraison.toLocaleString('fr-FR') + ' FCFA';
+rTotal.textContent = d.total.toLocaleString('fr-FR') + ' FCFA';
+rStatut.innerHTML = '<span class="badge b-' + d.statutCommande + '">' + d.statutCommande.replace('_',' ') + '</span>';
+}
+function aller() {
+const n = document.getElementById('inNumero').value.trim();
+if (n) location.href = '/recu/' + encodeURIComponent(n);
+}
+charger();
+</script>
+</body>
+</html>
