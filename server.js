@@ -1,3 +1,7 @@
+// ============================================================
+// Shopara - SaaS de boutiques en ligne multi-vendeurs
+// Partie 1: config, securite, auth, boutiques, produits, commandes, recus, visites
+// ============================================================
 const express = require('express');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
@@ -36,10 +40,6 @@ function requireVendeur(req, res, next) {
   const u = db.prepare('SELECT * FROM vendeurs WHERE id = ? AND actif = 1').get(req.session.vendeurId);
   if (!u) return res.status(401).json({ error: 'Compte invalide.' });
   req.vendeur = u; next();
-}
-function requireAdmin(req, res, next) {
-  if (req.session.isAdmin === true) return next();
-  return res.status(401).json({ error: 'Accès admin requis.' });
 }
 function requireBoutique(req, res, next) {
   const b = db.prepare('SELECT * FROM boutiques WHERE vendeur_id = ? AND slug = ?').get(req.vendeur.id, req.params.slug);
@@ -177,3 +177,9 @@ app.get('/api/publique/visite', limiterPublic, (req, res) => {
     .run(String(page).slice(0,100), boutiqueId, produitId ? String(produitId).slice(0,40) : null, sid, String(referer||'').slice(0,200));
   res.json({ ok: true });
 });
+
+// ===== SUITE (dashboard vendeur, abonnements, admin, pages) =====
+require('./routes-suite')(app, { db, randomId, requireVendeur });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log('Shopara demarre sur le port ' + PORT));
