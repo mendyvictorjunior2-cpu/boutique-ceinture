@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tableau de bord — Admin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; font-family: system-ui, sans-serif; }
+  body { background: #f3f4f6; color: #111827; }
+  .wrap { max-width: 960px; margin: auto; padding: 20px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-top: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { background: #fdf2f8; border-radius: 12px; padding: 16px; text-align: center; }
+  .stat b { font-size: 1.6rem; color: #be185d; display: block; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: .9rem; }
+  select { padding: 6px; border-radius: 6px; }
+  input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #d1d5db; margin-top: 8px; }
+  button { width: 100%; padding: 12px; margin-top: 8px; background: #be185d; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  .hidden { display: none; }
+  .err { color: #dc2626; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Connexion -->
+  <div class="card" id="login">
+    <h2>🔐 Connexion Admin</h2>
+    <input id="user" placeholder="Utilisateur" />
+    <input id="pass" type="password" placeholder="Mot de passe" />
+    <button onclick="login()">Se connecter</button>
+    <p id="lmsg" class="err"></p>
+  </div>
+
+  <!-- Panneau admin -->
+  <div class="hidden" id="panel">
+    <div class="card stats">
+      <div class="stat"><b id="s-ca">—</b>Chiffre d'affaires</div>
+      <div class="stat"><b id="s-cmd">—</b>Commandes</div>
+      <div class="stat"><b id="s-u">—</b>Unités vendues</div>
+      <div class="stat"><b id="s-stock">—</b>Stock restant</div>
+    </div>
+
+    <div class="card">
+      <h3>📦 Commandes</h3>
+      <table>
+        <thead><tr><th>#</th><th>Client</th><th>Ville</th><th>Qté</th><th>Total</th><th>Paiement</th><th>Statut</th><th>Action</th></tr></thead>
+        <tbody id="liste"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>⚙️ Produit</h3>
+      <label>Prix (FCFA) <input id="p-prix" type="number" min="0" /></label>
+      <label>Stock <input id="p-stock" type="number" min="0" /></label>
+      <button onclick="majProduit()">Mettre à jour</button>
+      <p id="pmsg" class="err"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+const fmt = n => new Intl.NumberFormat("fr-SN").format(n) + " FCFA";
+let P = null;
+
+async function login() {
+  const r = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user: user.value, pass: pass.value }) });
+  const d = await r.json();
+  if (d.ok) { document.getElementById("login").classList.add("hidden"); panel.classList.remove("hidden"); rafraichir(); }
+  else document.getElementById("lmsg").textContent = "Identifiants incorrects.";
+}
+
+async function rafraichir() {
+  const s = await fetch("/api/admin/stats").then(r => r.json());
+  if (s.erreur) return document.getElementById("lmsg").textContent = s.erreur;
+  s-ca.textContent = fmt(s.chiffre_affaires);
+  s-cmd.textContent = s.commandes;
+  s-u.textContent = s.unites_vendues;
+  s-stock.textContent = s.stock_restant;
+
+  const cs = await fetch("/api/admin/commandes").then(r => r.json());
+  liste.innerHTML = cs.map(c => `<tr>
+    <td>${c.id}</td><td>${c.nom}<br><small>${c.telephone}</small></td><td>${c.ville}</td>
+    <td>${c.quantite}</td><td>${fmt(c.total_fcfa)}</td><td>${c.mode_paiement}<br><small>${c.statut_paiement || "—"}</small></td>
+    <td><select onchange="majStatut(${c.id}, this.value)">
+      <option value="payee" ${c.statut_paiement==="payee"?"selected":""}>Payée</option>
+      <option value="en_attente_paiement" ${c.statut_paiement==="en_attente_paiement"?"selected":""}>En attente paiement</option>
+      <option value="confirmee" ${c.statut_paiement==="confirmee"?"selected":""}>Confirmée</option>
+      <option value="livree" ${c.statut_paiement==="livree"?"selected":""}>Livrée</option>
+      <option value="annulee" ${c.statut_paiement==="annulee"?"selected":""}>Annulée</option>
+    </select></td>
+    <td><button style="width:auto;padding:6px 10px" onclick="rafraichir()">↻</button></td>
+  </tr>`).join("");
+
+  P = await fetch("/api/produit").then(r => r.json());
+  p-prix.value = P.prix_fcfa; p-stock.value = P.stock;
+}
+
+async function majStatut(id, statut) {
+  const r = await fetch(`/api/admin/commande/${id}/statut`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ statut }) });
+  const d = await r.json();
+  if (!d.ok) alert("Erreur : " + (d.erreur || "?"));
+  rafraichir();
+}
+
+async function majProduit() {
+  const r = await fetch("/api/admin/produit", { method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prix_fcfa: Number(p-prix.value), stock: Number(p-stock.value) }) });
+  const d = await r.json();
+  pmsg.textContent = d.ok ? "✅ Produit mis à jour." : "❗ " + d.erreur;
+  if (d.ok) rafraichir();
+}
+
+// Auto-connexion si session déjà active
+(async () => {
+  const s = await fetch("/api/admin/stats").then(r => r.json());
+  if (!s.erreur) { login.classList.add("hidden"); panel.classList.remove("hidden"); rafraichir(); }
+})();
+</script>
+</body>
+</html>
